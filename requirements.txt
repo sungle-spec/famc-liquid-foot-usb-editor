@@ -1,0 +1,6 @@
+# FAMC Liquid Foot+ Editor — runtime deps
+PySide6>=6.6        # native Qt GUI
+pyserial>=3.5       # USB-serial transport (FTDI VCP)
+pyftdi>=0.55        # FTDI EEPROM PID trick / direct FTDI access
+mido>=1.3           # MIDI message handling
+python-rtmidi>=1.5  # CoreMIDI/ALSA/WinMM backend for mido

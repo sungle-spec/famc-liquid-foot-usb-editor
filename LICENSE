@@ -1,0 +1,47 @@
+MIT License
+
+Copyright (c) 2026 sungle-spec
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+SCOPE / THIRD-PARTY NOTICE
+
+This MIT license covers the original work in this repository: the editor
+application (the `lfeditor` package), the reverse-engineering and diagnostic
+scripts, the tests, and the documentation.
+
+It does NOT grant rights to FAMC, LLC material. The Liquid Foot+ firmware, the
+original LF+ Editor application, the product manual, and the captured device
+sysex dumps (`reference/sysex_dumps/*.syx`) are included or referenced here only
+as fixtures for interoperability, preservation, and testing. FAMC is defunct, but
+these artifacts may carry third-party rights — they are git-ignored where large
+and must not be redistributed as part of a paid product without satisfying
+yourself as to their status. The decompiled `Liquid-Foot.jar` sources under
+`reference/jar_decompiled/` are derived from FAMC's own distributed binary and are
+kept solely for reverse-engineering reference.
+
+HARDWARE-SAFETY DISCLAIMER
+
+This tool can write presets to audio hardware and (optionally) rewrite an FTDI
+EEPROM. It can overwrite your presets and, if the EEPROM step is interrupted or
+misused, can render the device's USB interface unusable. Use entirely at your own
+risk. Back up your presets (and the EEPROM) before use. The authors accept no
+liability for damaged presets or hardware.

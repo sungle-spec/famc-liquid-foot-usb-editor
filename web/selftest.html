@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>LF+ web selftest</title>
+<style>body{background:#11151a;color:#e6e6e6;font-family:Menlo,monospace;padding:20px}.p{color:#5dd84f}.f{color:#d8423a}</style></head>
+<body>
+<h3>LF+ Editor (web) — self-test</h3>
+<pre id="out">running… (first load fetches Pyodide/WASM)</pre>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+(async () => {
+  const out = document.getElementById("out");
+  const log = (m, cls) => { out.innerHTML += "\n" + (cls ? `<span class="${cls}">${m}</span>` : m); };
+  try {
+    if (typeof loadPyodide === "undefined") throw new Error("Pyodide didn't load from the CDN — serve over http(s), not file://, and check your connection.");
+    const py = await loadPyodide();
+    const buf = await (await fetch("lfeditor_bundle.zip")).arrayBuffer();
+    py.unpackArchive(buf, "zip");
+    py.runPython("import sys; sys.path.insert(0,'.')");
+    const res = py.runPython(`
+import json
+import lfeditor.webapi as w, lfeditor.schema as s
+sess = w.Session()
+data = open("lfeditor/resources/factory/Factory_Defaults12.syx","rb").read()
+counts = sess.load(data)
+ok_roundtrip = (sess.save() == data)
+sess.set_str(1, 0, 0, 16, "WEB_SELFTEST")
+again = w.Session(); again.load(sess.save())
+ok_edit = again.get_str(1, 0, 0, 16).strip() == "WEB_SELFTEST"
+sch = s.tab_schema()
+json.dumps({"roundtrip": ok_roundtrip, "edit": ok_edit, "tabs": len(sch["tabs"]),
+            "presets": counts.get("Preset"), "names": [t["name"] for t in sch["tabs"]]})
+`);
+    const r = JSON.parse(res);
+    log("schema tabs: " + r.tabs + "  (" + r.names.join(", ") + ")");
+    log("presets decoded: " + r.presets);
+    log("byte-exact round-trip: " + (r.roundtrip ? "PASS" : "FAIL"), r.roundtrip ? "p" : "f");
+    log("edit persists through save/reload: " + (r.edit ? "PASS" : "FAIL"), r.edit ? "p" : "f");
+    const ok = r.roundtrip && r.edit && r.tabs === 11;
+    log("\n" + (ok ? "SELFTEST PASS" : "SELFTEST FAIL"), ok ? "p" : "f");
+  } catch (e) { log("ERROR: " + e, "f"); console.error(e); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LF+ Editor (web)</title>
+<link rel="stylesheet" href="style.css?v=8">
+</head>
+<body>
+  <div id="toolbar">
+    <span class="brand">LF+ Editor</span>
+    <button class="tbtn" id="btn-open">Open…</button>
+    <input type="file" id="file-input" accept=".syx" hidden>
+    <button class="tbtn" id="btn-save" disabled>Save</button>
+    <button class="tbtn" id="btn-backup" disabled title="Save a copy (download)">Backup</button>
+    <span class="tbsep"></span>
+    <button class="tbtn" id="btn-copy" disabled>Copy</button>
+    <button class="tbtn" id="btn-paste" disabled>Paste</button>
+    <button class="tbtn risk" id="btn-clear" disabled>Clear…</button>
+    <span class="tbsep"></span>
+    <button class="tbtn" id="btn-find" disabled>Find…</button>
+    <button class="tbtn" id="btn-qlist" disabled title="Show/hide the searchable record list">Q-LIST</button>
+    <button class="tbtn" id="btn-raw" disabled title="Show/hide the raw bytes of this record">Raw</button>
+    <span class="tbsep"></span>
+    <select class="tbtn" id="tools" disabled title="CSV, reports, bulk tools">
+      <option value="">Tools…</option>
+      <optgroup label="CSV">
+        <option value="csv-export">Export CSV…</option>
+        <option value="csv-import">Import CSV…</option>
+      </optgroup>
+      <optgroup label="Reports">
+        <option value="report-presets">Preset report…</option>
+        <option value="report-songs">Song report…</option>
+        <option value="report-setlists">Set-List report…</option>
+      </optgroup>
+      <optgroup label="Bulk">
+        <option value="quickprog">Quick Command Programmer…</option>
+        <option value="reorder">Re-order Records…</option>
+      </optgroup>
+      <optgroup label="Clear labels">
+        <option value="clear-9">Clear Preset Labels…</option>
+        <option value="clear-10">Clear Preset MAP Labels…</option>
+        <option value="clear-11">Clear Song Preset Labels…</option>
+      </optgroup>
+    </select>
+    <select class="tbtn" id="factory" title="Load Factory Defaults">
+      <option value="">Load Factory…</option>
+    </select>
+    <span class="tbsep"></span>
+    <button class="tbtn" id="btn-connect" disabled title="Connect to an LF+ over USB (Chrome/Edge)">Connect</button>
+    <button class="tbtn" id="btn-from" disabled title="Read everything from the LF+">From LF+</button>
+    <button class="tbtn risk" id="btn-to" disabled title="Write the current record to the LF+">To LF+</button>
+    <span id="conn" class="conn-off" title="device connection">●</span>
+    <span class="spacer"></span>
+    <span id="dirty"></span>
+    <span id="status">starting…</span>
+  </div>
+
+  <div id="tabstrip"></div>
+  <div id="recordhdr"></div>
+  <div id="main">
+    <div id="qlist" class="hidden"></div>
+    <div id="content">
+      <p class="muted">Open a <code>.syx</code> backup, or load a factory default, to begin.</p>
+    </div>
+  </div>
+  <div id="rawpanel" class="hidden"></div>
+  <div id="modal-root"></div>
+
+  <div id="overlay">
+    <div class="ring"></div>
+    <div class="msg" id="overlay-msg">Loading the editor… (first load fetches Python/WASM, ~once)</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"
+          onerror="document.getElementById('overlay-msg').textContent='Could not load Pyodide from the CDN — check your network connection and reload.'"></script>
+  <script src="render.js?v=8"></script>
+  <script src="serial.js?v=8"></script>
+  <script src="app.js?v=8"></script>
+</body>
+</html>

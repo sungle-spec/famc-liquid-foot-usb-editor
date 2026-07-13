@@ -1,0 +1,300 @@
+/* Faithful FAMC LF+ Editor v6.31 theme — values transcribed from lfeditor/ui/theme.py (QSS)
+   and the custom-painted widgets in ui/components.py / ui/tabs/. Every colour, radius and
+   fixed size below mirrors the native build. */
+:root {
+  --accent:#36c9d4; --accent-dim:#1f7d85;
+  --green:#5dd84f; --green-dim:#2e7d32;
+  --red:#d8423a; --amber:#d8a200;
+  --bg:#23272b; --panel:#2c3137; --panel-dk:#1c2024; --panel-light:#3a4046;
+  --field:#11151a; --lcd-bg:#0c1a0c;
+  --text:#e6e6e6; --text-dim:#9aa0a6; --border:#15181c; --border-light:#3f464d;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; }
+body {
+  background:var(--bg); color:var(--text);
+  font-family:-apple-system,"Helvetica Neue","Segoe UI",Arial,sans-serif; font-size:12px;
+  display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+button { font-family:inherit; font-size:12px; }
+
+/* ---- native-style scrollbars (theme.py QScrollBar) ---- */
+::-webkit-scrollbar { width:13px; height:13px; background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border-light); border:1px solid var(--panel-light);
+  border-radius:5px; }
+::-webkit-scrollbar-thumb:hover { background:var(--accent-dim); }
+::-webkit-scrollbar-corner { background:var(--bg); }
+
+/* ---- toolbar ---- */
+#toolbar {
+  display:flex; align-items:center; gap:3px; padding:5px 6px;
+  background:var(--panel); border-bottom:1px solid var(--border);
+}
+#toolbar .brand { color:var(--accent); font-weight:700; letter-spacing:.5px; margin:0 8px 0 2px; }
+#toolbar .spacer { flex:1; }
+.tbtn {
+  background:var(--panel-light); color:var(--text); border:1px solid var(--border);
+  border-radius:6px; padding:7px 11px; min-width:40px; cursor:pointer;
+}
+.tbtn:hover { background:var(--accent-dim); }
+.tbtn:active { background:var(--accent); color:var(--bg); }
+.tbtn:disabled { color:var(--text-dim); background:var(--panel); cursor:default; }
+.tbtn.primary { background:var(--accent-dim); border-color:var(--accent); }
+#status { color:var(--text-dim); margin-left:6px; }
+#dirty { color:var(--amber); font-weight:700; }
+.tbsep { width:1px; align-self:stretch; background:var(--border-light); margin:2px 4px; }
+#conn { font-size:14px; margin:0 2px; }
+.conn-off { color:var(--red); } .conn-on { color:var(--green); text-shadow:0 0 5px rgba(93,216,79,.7); }
+.tbtn.risk { border-color:#7a2a26; }
+.tbtn.risk:hover { border-color:var(--red); }
+/* transfer-style buttons (native QPushButton#xfer) */
+.tbtn.xfer, button.xfer {
+  background:#243b46; border:1px solid var(--accent-dim); border-radius:5px;
+  color:var(--accent); font-weight:600; padding:5px 10px; cursor:pointer;
+}
+.tbtn.xfer:hover, button.xfer:hover { background:var(--accent-dim); color:#fff; }
+.tbtn.xfer:disabled, button.xfer:disabled { background:var(--panel); border-color:var(--border); color:var(--text-dim); }
+
+/* main area: optional Q-LIST dock + content */
+#main { flex:1; display:flex; min-height:0; }
+#content { flex:1; overflow:auto; padding:10px 8px 8px 10px; }
+#qlist { width:220px; flex:none; background:var(--panel-dk); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden; }
+#qlist.hidden, #rawpanel.hidden { display:none; }
+.qtitle { color:var(--accent); font-weight:700; padding:7px 9px; border-bottom:1px solid var(--border); }
+.qsearch { margin:6px; }
+.qitems { overflow:auto; flex:1; }
+.qitem { padding:4px 9px; cursor:pointer; font-family:Menlo,monospace; font-size:11px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.qitem:hover { background:var(--panel-light); }
+.qitem.sel { background:var(--accent-dim); color:#fff; }
+.qitem[draggable=true] { cursor:grab; }
+.qtype { margin:6px 6px 0; width:calc(100% - 12px); }
+.droptgt { outline:2px dashed var(--accent); outline-offset:1px; }
+
+/* raw byte panel */
+#rawpanel { max-height:170px; overflow:auto; background:var(--panel-dk); border-top:1px solid var(--border); padding:6px 10px; }
+.rawhdr { color:var(--text-dim); margin-bottom:4px; }
+.rawgrid { display:flex; flex-wrap:wrap; gap:4px; }
+.rawcell { font-family:Menlo,monospace; font-size:10px; background:var(--field); border:1px solid var(--border);
+  border-radius:3px; padding:1px 4px; }
+.rawcell b { color:var(--text-dim); font-weight:400; } .rawcell i { color:#5aa9e6; font-style:normal; }
+
+/* modal dialogs */
+.modal-back { position:fixed; inset:0; background:rgba(8,10,12,.6); display:flex; align-items:center;
+  justify-content:center; z-index:60; }
+.modal { background:var(--panel); border:1px solid var(--border-light); border-radius:7px; min-width:340px;
+  max-width:680px; max-height:84vh; display:flex; flex-direction:column; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+.modal-title { color:var(--accent); font-weight:700; padding:10px 14px; border-bottom:1px solid var(--border); }
+.modal-body { padding:14px; overflow:auto; display:flex; flex-direction:column; gap:10px; }
+.modal-foot { padding:10px 14px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
+.modal-row { display:flex; gap:12px; flex-wrap:wrap; }
+.nf { display:inline-flex; align-items:center; gap:5px; color:var(--text-dim); }
+.nf input[type=number] { width:72px; } .wide { width:100%; }
+.qprow { display:flex; align-items:center; gap:10px; } .qplabel { width:80px; color:var(--text-dim); }
+.findresults { max-height:50vh; overflow:auto; border:1px solid var(--border); border-radius:4px; }
+.findsec { color:var(--accent); font-size:12px; margin-top:2px; border-bottom:1px solid var(--border); padding-bottom:3px; }
+.findtypes label, .findonce { color:var(--text-dim); display:inline-flex; align-items:center; gap:3px; }
+.findtable { width:100%; border-collapse:collapse; font-size:12px; }
+.findtable th { text-align:left; color:var(--text-dim); background:var(--panel-dk); padding:4px 8px; position:sticky; top:0; }
+.findtable td { padding:3px 8px; border-top:1px solid var(--border); }
+.findtable tr { cursor:pointer; } .findtable tr:hover td { background:var(--panel-dk); }
+
+/* ---- tab strip (theme.py QTabBar) ---- */
+#tabstrip { display:flex; flex-wrap:wrap; background:var(--bg); border-bottom:1px solid var(--border);
+  padding:4px 6px 0; gap:1px; }
+.tab {
+  padding:6px 12px; cursor:pointer; color:var(--text-dim); user-select:none;
+  background:var(--panel-dk); border:1px solid var(--border); border-bottom:none;
+  border-top-left-radius:5px; border-top-right-radius:5px;
+}
+.tab:hover { color:var(--text); }
+.tab.active { background:var(--panel); color:var(--accent); font-weight:700; }
+
+/* ---- record header (components.py RecordHeader) ---- */
+#recordhdr {
+  display:flex; align-items:center; gap:8px; padding:4px 6px;
+  background:var(--bg); border-bottom:1px solid var(--border);
+}
+#recordhdr .tabtitle { margin:0 0 0 2px; }
+#recordhdr .recspin { width:72px; }
+#recordhdr .fieldlabel { color:var(--text); }
+.lcd {
+  background:var(--lcd-bg) !important; color:var(--green) !important; border:1px solid var(--border) !important;
+  border-radius:4px; padding:4px 8px; font-weight:700;
+  font-family:"Menlo","Courier New",monospace;
+}
+.lcd:focus { border-color:var(--green) !important; }
+.lcd.name { width:180px; } .lcd.nick { width:110px; }
+.fieldlabel { color:var(--text-dim); }
+
+/* ---- content / columns / sections ---- */
+.columns { display:flex; gap:8px; align-items:flex-start; }
+.column { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
+/* global-style tabs: fixed 252px columns packed left (ui/tabs/global_tab.py) */
+.columns.gcolumns { justify-content:flex-start; }
+.gcolumns > .column { flex:0 0 252px; max-width:252px; }
+.gcolumns .formrow > label { font-size:11px; }
+.gcolumns .formrow input, .gcolumns .formrow select { max-width:110px; justify-self:end; width:110px; }
+
+/* titled section panel (theme.py QGroupBox: floating title chip on the border) */
+.section {
+  position:relative; background:var(--panel); border:1px solid var(--border-light);
+  border-radius:7px; padding:14px 8px 8px; margin-top:9px;
+}
+.section > .title {
+  position:absolute; top:-9px; left:10px; padding:1px 8px;
+  color:var(--accent); font-weight:700; background:var(--panel);
+  border-radius:4px; max-width:calc(100% - 24px);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.section > .note { color:var(--text-dim); font-size:11px; padding:0 2px 4px; }
+.section > .body { padding:2px; display:flex; flex-direction:column; gap:5px; }
+/* Qt QFormLayout: right-aligned label column, 5px spacing */
+.formrow { display:grid; grid-template-columns:minmax(80px,max-content) 1fr; align-items:center; column-gap:8px; }
+.formrow > label { color:var(--text); text-align:right; }
+
+/* ---- inputs (theme.py QLineEdit/QSpinBox/QComboBox) ---- */
+input[type=text], input[type=number], select {
+  background:var(--field); color:var(--text); border:1px solid var(--border);
+  border-radius:4px; padding:3px 6px; font-family:inherit; font-size:12px; min-width:0;
+}
+input:focus, select:focus { outline:none; border-color:var(--accent); }
+
+/* ---- vertical rocker switch (components.py RockerSwitch, 22x30, I/O glyphs) ---- */
+.rocker { display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none; }
+.rocker .rk {
+  width:22px; height:30px; flex:none; display:flex; flex-direction:column;
+  border-radius:3px; overflow:hidden;
+  background:var(--red); border:1px solid #7a2622;
+}
+.rocker .rk span { flex:1; display:flex; align-items:center; justify-content:center;
+  color:#fff; font-size:8px; font-weight:700; line-height:1; }
+.rocker .rk .io-o { background:rgba(255,255,255,.27); }          /* off: bottom half lit */
+.rocker.on .rk { background:var(--green); border-color:#2e7d1f; }
+.rocker.on .rk .io-o { background:transparent; }
+.rocker.on .rk .io-i { background:rgba(255,255,255,.27); }        /* on: top half lit */
+.rocker .cap { color:var(--text); }
+
+/* ---- horizontal pill toggle (components.py ToggleSwitch, 34x20 sliding knob) ---- */
+.pill { position:relative; display:inline-block; width:34px; height:20px; cursor:pointer; flex:none; }
+.pill .track { position:absolute; inset:1px; border-radius:9px; background:rgba(216,66,58,.31); }
+.pill .knob { position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%;
+  background:var(--red); transition:left .1s; }
+.pill.on .track { background:rgba(93,216,79,.31); }
+.pill.on .knob { left:17px; background:var(--green); }
+
+/* ---- IA-state table (fields.py IAStateGridField: QTableWidget, State col 56px, 20px rows) ---- */
+.iawrap { max-height:420px; overflow:auto; border:1px solid var(--border); }
+table.iatable { border-collapse:collapse; width:100%; background:var(--panel-dk); }
+table.iatable th { position:sticky; top:0; background:var(--panel-light); color:var(--text-dim);
+  font-weight:600; text-align:left; padding:4px 6px; border-right:1px solid var(--border);
+  border-bottom:1px solid var(--border); }
+table.iatable th.state, table.iatable td.state { width:56px; text-align:center; }
+table.iatable td { height:20px; padding:0 6px; border-bottom:1px solid var(--border);
+  font-size:12px; white-space:nowrap; }
+table.iatable td.num { width:26px; color:var(--text-dim); text-align:right; }
+
+/* ---- label grids (fields.py LabelGridField: numbered 88px LCD cells) ---- */
+.lblgrid { display:grid; column-gap:6px; row-gap:3px; align-items:center; justify-content:start; }
+.lblgrid .idx { color:var(--text-dim); font-size:11px; text-align:right; }
+.lblgrid input.lcd { width:88px; }
+
+/* generic grids */
+.grid { display:grid; gap:2px; align-items:center; }
+.cell { display:flex; align-items:center; gap:4px; }
+.cell .idx { color:var(--text-dim); min-width:20px; text-align:right; }
+.grid input[type=number] { width:64px; }
+.grid select { max-width:170px; }
+.grid > .idx { color:var(--text-dim); text-align:right; padding-right:2px; }
+.bitcell { display:flex; align-items:center; gap:3px; }
+
+/* MMC helper (fields.py MMCField: spin+caption columns, buttons) */
+.mmc { display:flex; flex-direction:column; gap:6px; }
+.mmcrow { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; }
+.mmccol { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.mmccol input { width:56px; }
+.mmccol .cap { color:var(--text-dim); font-size:11px; }
+.mmc button { background:var(--panel-light); color:var(--text); border:1px solid var(--border);
+  border-radius:5px; padding:5px 10px; cursor:pointer; }
+.mmc button:hover { background:var(--accent-dim); }
+
+/* ---- command table (fields.py CommandTableField: Function 120 / MIDI 78 / Cmd stretch, 24px rows) ---- */
+table.cmd { border-collapse:collapse; width:100%; background:var(--panel-dk); }
+table.cmd th, table.cmd td { border:1px solid var(--border); padding:1px 3px; text-align:left; }
+table.cmd th { background:var(--panel-light); color:var(--text-dim); font-weight:600; padding:4px 6px; }
+table.cmd td { height:24px; }
+table.cmd td select, table.cmd td input { width:100%; }
+table.cmd col.c-fn { width:120px; } table.cmd col.c-midi { width:78px; }
+table.cmd col.c-d1, table.cmd col.c-d2 { width:64px; }
+table.cmd td .decoded { color:var(--accent); }
+
+/* hex bytes grid (fields.py HexBytesField: &hNN 52px cells, blue HEX/DEC read-outs) */
+.hexgrid { display:grid; grid-template-columns:repeat(16,auto); gap:2px 4px; justify-content:start; }
+.hexgrid .hx { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.hexgrid .hx .num { color:var(--text-dim); font-size:11px; }
+.hexgrid input { width:52px; text-align:center; font-family:Menlo,monospace; }
+.hexgrid .hex, .hexgrid .dec { color:#5aa9e6; font-family:Menlo,monospace; font-size:10px; }
+
+/* section tab title (Midi/Groups + Global heading row) */
+.tabtitle { color:var(--accent); font-weight:800; font-size:15px; margin:0 0 8px 2px; }
+.tabtitlerow { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.tabtitlerow .tabtitle { flex:1; margin:0; }
+
+/* ---- Pages: pedalboard (pages_tab.py SwitchTile 150x84, tilebox h40) ---- */
+.pagesmid { display:grid; grid-template-columns:minmax(0,1fr) 210px; gap:12px; align-items:start; }
+.pedalboard { display:grid; grid-template-columns:repeat(4,150px); gap:8px; padding:6px; }
+.switchtile { width:150px; height:84px; background:transparent; border:2px solid transparent;
+  border-radius:7px; padding:3px 3px 2px; cursor:pointer; user-select:none;
+  display:flex; flex-direction:column; gap:2px; }
+.switchtile.sel { border-color:var(--accent); background:rgba(54,201,212,.10); }
+.switchtile .tilebox { background:var(--panel-dk); border:1px solid #000; border-radius:6px;
+  height:40px; flex:none; display:flex; flex-direction:column; justify-content:center; padding:4px 6px; }
+.switchtile .tilefn { color:var(--green); font-size:10px; text-align:center;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.switchtile .tilerow { display:flex; align-items:center; gap:2px; }
+.switchtile .tilenum { flex:1; color:var(--amber); font-weight:800; font-size:14px; }
+.switchtile .tilerow .tilenum:first-child { text-align:right; }
+.switchtile .tilerow .tilenum:last-child { text-align:left; }
+.switchtile .glyphwrap { flex:none; line-height:0; }
+.funcpick { display:flex; gap:6px; }
+.funcpick select:first-child { width:110px; flex:none; }
+.funcpick select:last-child { flex:1; min-width:150px; }
+.selbtn { color:var(--amber); font-weight:700; margin-bottom:4px; }
+.formrow > label.fnlabel { color:var(--green); font-weight:700; text-align:left; }
+
+/* ---- Pages: group navigator (pages_tab.py GroupBox 168x74, sky-blue, yellow numbers) ---- */
+.navinner { display:flex; flex-direction:column; gap:5px; align-items:center; padding:4px; }
+.navinner > .note { color:var(--text-dim); font-size:11px; text-align:center; align-self:stretch; }
+.groupcell { display:flex; flex-direction:column; align-items:center; gap:1px; }
+.groupbox { width:168px; height:74px; background:#3ba7e0; border:2px solid #2a7bb0; border-radius:7px;
+  cursor:pointer; display:grid; grid-template-columns:repeat(4,34px); grid-auto-rows:18px;
+  gap:2px; padding:6px 8px; justify-content:center; align-content:center; }
+.groupbox.sel { border-color:#fff; }
+.groupbox .grpnum { color:#f2e23a; font-weight:800; font-size:13px; text-align:center; line-height:18px; }
+.grpcap { color:var(--text-dim); font-size:11px; }
+
+/* ---- Midi/Groups 2x8 channel blocks (midi_groups_tab.py, borderless grid look) ---- */
+.chanwrap { display:flex; gap:26px; align-items:flex-start; padding:2px 4px; flex-wrap:wrap; }
+table.chan { border-collapse:separate; border-spacing:7px 4px; background:transparent; }
+table.chan th { color:var(--text-dim); font-size:11px; font-weight:600; text-align:center;
+  background:transparent; border:none; padding:0; }
+table.chan td { border:none; padding:0; text-align:center; vertical-align:middle; }
+table.chan .chnum { color:var(--green); text-align:right; }
+table.chan input.lcd { width:104px; }
+table.chan input.maxpre { width:60px; }
+.mgcols { display:flex; gap:8px; align-items:flex-start; }
+.mgcols .mgfixed { flex:none; }
+.mgcols .mggrow { flex:1; min-width:0; }
+.mgnum input { width:150px; }
+
+/* loading overlay */
+#overlay { position:fixed; inset:0; background:rgba(10,12,14,.92); display:flex; align-items:center;
+  justify-content:center; flex-direction:column; gap:14px; z-index:50; }
+#overlay .ring { width:46px; height:46px; border:4px solid var(--panel-light);
+  border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+#overlay .msg { color:var(--text-dim); }
+#overlay.hidden { display:none; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.muted { color:var(--text-dim); font-style:italic; }
