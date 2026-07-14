@@ -84,6 +84,9 @@ byte-for-byte; only changed records change):
 - **Hardware → Device Connection Setup** — the FTDI-EEPROM wizard that exposes the device's serial
   port on macOS (one-time; see [Getting started §4](docs/GETTING_STARTED.md#4-connect-your-lf-macos-one-time-setup)
   and the [illustrated walkthrough](docs/DESKTOP_GUIDE.md#first-time-setup-make-the-device-appear-as-a-serial-port)).
+- **Firmware / bricked units** — a standalone **[LF+ Firmware Loader (beta)](docs/FIRMWARE_LOADER.md)**
+  targets recovery of units bricked by failed firmware updates (community-tested; the editor's own
+  *Load Firmware* stays disabled until it graduates).
 - **Hover help** — every control shows the **original LF+ Editor's exact tooltip** on hover
   (recovered verbatim from the app and mapped to our controls): 131 field + 3 section tooltips
   across 10 tabs, scoped per tab, the Global/IA-Slot maps confirmed by a live hover pass against the
