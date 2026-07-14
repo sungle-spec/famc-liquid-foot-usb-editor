@@ -195,6 +195,8 @@ Building it yourself (one OS at a time — PyInstaller can't cross-compile) is d
 
 ## Web version (no install)
 
+**→ Use it now: <https://sungle-spec.github.io/famc-liquid-foot-usb-editor/>**
+
 There's also a **browser build** — a **pixel-for-pixel port of all 11 tabs** that runs entirely
 client-side via [Pyodide](https://pyodide.org), reusing the *same* byte-exact codec and tools (no
 second implementation). Open it, load a `.syx`, edit, download — offline, nothing to install. It has
