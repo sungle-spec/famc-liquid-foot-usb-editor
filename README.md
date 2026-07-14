@@ -9,8 +9,11 @@ stop running on modern systems. This project rebuilds it as a maintainable
 **New here? → [Getting started](docs/GETTING_STARTED.md)** — launch the desktop app or the web
 editor and connect your LF+ in minutes.
 
-> **Companion project:** a sibling (currently private) editor for the FAMC **Liquid Router
-> A-16** first cracked the FAMC USB-serial protocol; this project reuses that comms work for the
+[![Buy Me a Coffee](https://img.shields.io/badge/☕-Buy%20me%20a%20coffee-ffdd00)](https://buymeacoffee.com/sungle.spec)
+
+> **Companion project:** a sibling editor for the FAMC **Liquid Router A-16**
+> ([famc-liquid-router-usb-editor](https://github.com/sungle-spec/famc-liquid-router-usb-editor))
+> first cracked the FAMC USB-serial protocol; this project reuses that comms work for the
 > Liquid Foot+.
 
 ## Status
@@ -228,3 +231,8 @@ Two small pieces of FAMC-origin *data* are included, solely so the editor is usa
 Both are included in good faith for preservation of discontinued, unsupported hardware. If you
 hold rights to this material and want it removed, **open a GitHub issue** and it will be taken
 down promptly. Writing to hardware is at your own risk; see `LICENSE`.
+
+---
+
+Free, open source, and it'll stay that way. If this saved your rig, [☕ buy me a coffee](https://buymeacoffee.com/sungle.spec) —
+it funds testing on hardware I don't own and reverse-engineering the next piece of orphaned gear.
