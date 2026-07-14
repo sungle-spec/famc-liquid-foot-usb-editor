@@ -39,12 +39,16 @@ Key facts:
   4–9 are identical across all five models. A flasher must therefore pick the right file for the
   connected model; it cannot derive the model from the firmware header.
 
-### Flashing — still intentionally NOT implemented
-Writing this image to the device's bootloader is the one genuinely **brick-risk** operation
-(an interrupted/incorrect write kills the USB interface). We have the format and the opcode, but
-the bootloader handshake/ack/erase sequence isn't reverse-engineered, and the upside is low
-(owners can still use FAMC's original editor to flash). It stays out of scope; the menu item
-remains disabled.
+### Flashing — now in a separate beta tool, still NOT in the editor
+Writing this image to the device is the one genuinely **brick-risk** operation (an
+interrupted/incorrect write kills the unit). The protocol turned out to be simpler than feared:
+the decompiled 2013 editor streams the whole image as a **single MIDI sysex message** (no
+app-level handshake), and the device has a firmware-independent rescue mode (hold **B7 at
+power-on** → "wait for MIDI Firmware", manual p.15). A standalone **LF+ Firmware Loader
+(beta)** implements exactly that plus image verification against a SHA-256 allowlist of 241
+known FAMC releases — see [FIRMWARE_LOADER.md](FIRMWARE_LOADER.md) for the tool and its
+community-testing ladder. The editor's own *Load Firmware* menu item stays disabled until that
+validation completes.
 
 ## What the firmware changes (and the editor must track)
 

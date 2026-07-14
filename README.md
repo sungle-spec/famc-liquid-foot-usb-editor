@@ -153,9 +153,10 @@ Four independent sources cross-check each other:
 | `lfeditor/search.py` · `lfeditor/ui/qlist_dock.py` | Find search engine · Q-LIST navigator dock |
 | `lfeditor/ui/midi_monitor.py` | MIDI monitor / pass-thru utility |
 | `lfeditor/quickprog.py` · `lfeditor/reorder.py` | Quick Repeated Command Programmer · re-order with reference sync |
+| `lffirmware/` | standalone **Firmware Loader (beta)** — bricked-unit recovery over MIDI ([docs](docs/FIRMWARE_LOADER.md)) |
 | `docs/` | `LF_PROTOCOL.md`, `LF_DATA_MODEL.md`, `LF_UI_MAP.md`, `RE_NOTES.md`, `FIRMWARE_NOTES.md` |
-| `reference/` | RE source material (large binaries git-ignored; dumps + decompiled JAR kept) |
-| `tests/` | codec round-trip tests vs the 3 dumps + factory syx |
+| `reference/` *(not in this repo)* | the maintainer's local RE source material — device dumps, FAMC files; tests that need it skip cleanly |
+| `tests/` | the full pytest suite — codec round-trips vs the factory files everywhere, plus reference-dump tests that run on the maintainer's checkout |
 | `.github/workflows/tests.yml` | CI: the full pytest suite head-less on Windows/Linux/macOS |
 | [`famc-liquid-foot-editor-builds`](https://github.com/sungle-spec/famc-liquid-foot-editor-builds) | **sibling repo**: PyInstaller spec, icons, AppImage tooling, the 3-OS build/release workflow, and the downloadable Releases |
 
