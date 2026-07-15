@@ -63,6 +63,7 @@ and **hover tooltips** on every control from the same curated `ui/help_text.py` 
 | Drag-drop slot assign (Q-LIST → slot/command) | ✅ | ✅ | Q-LIST items drag onto slot pickers + command rows; Pages tile drag-swap |
 | Device I/O: Connect + From/To LF+ | ✅ (USB-serial) | ✅ | WebSerial (`web/serial.js` + `webapi.dev_*`); hardware-verified 2026-07-13, write gated. See [WEBSERIAL.md](WEBSERIAL.md) |
 | Device I/O: MIDI Monitor, EEPROM wizard, live-calibration, resets | ✅ | 🔌 | not yet ported to WebSerial |
+| Device I/O: **USB MIDI In Bridge** (virtual "LF+ USB" port → device) | ✅ | 🔌 | needs Web MIDI → WebSerial forwarding; deferred (desktop-only for now) |
 
 ## Summary
 

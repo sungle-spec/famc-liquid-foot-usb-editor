@@ -124,6 +124,14 @@ stored field — nothing for the editor to add.
 > published MIDI implementation never advertised as a receivable command. Our MIDI Monitor /
 > Pass-Thru already relays clock to a device's DIN input via any USB-MIDI interface, which
 > remains the practical path for users who want external clock into the unit.
+>
+> **But the chart's commands DO work over USB — recovered 2026-07-15.** With the global
+> "Allow MIDI CMDS = YES", the LF+ processes Bank/PC/CC-trigger messages arriving raw on the
+> USB-serial link (hardware-confirmed; Editor Mode blocks them, so it's an either/or with
+> record transfers). The editor's **Hardware ▸ USB MIDI In Bridge** exposes this as a virtual
+> MIDI port ("LF+ USB") — a DAW can switch presets and fire IA slots over the editor cable,
+> which is more than the original editor ever wired up. Full tiered verdict in
+> [LF_USB_DIRECT.md](LF_USB_DIRECT.md) ("Channel MIDI on the UART").
 
 ## Does the firmware reveal editor features we're missing?
 

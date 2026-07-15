@@ -232,6 +232,22 @@ must be in the `dialout` group; **macOS** works out of the box.
 
 **Complete Transfers** menu = the same pull/push, phrased as "get everything / send all edits".
 
+### Drive the LF+ from a DAW over the same cable (USB MIDI In Bridge)
+
+**Hardware ▸ USB MIDI In Bridge…** turns the editor cable into a MIDI *input* for the device:
+it creates a virtual MIDI port named **"LF+ USB"** (macOS/Linux; on Windows install loopMIDI
+and pick its port instead) and forwards Program Changes and CCs to the LF+ — so a DAW or
+sequencer can switch presets and fire IA slots (the manual's CC#1–8 trigger set) with no MIDI
+interface at all. Two requirements:
+
+* The device global **"Allow MIDI CMDS" must be YES** (Global tab → To LF+, or the front
+  panel's Global menu), and your DAW must send on the device's **global MIDI channel**.
+* The LF+ ignores MIDI while in Editor Mode, so the bridge and the editor connection take
+  turns: starting the bridge offers to disconnect, and clicking Connect stops the bridge.
+
+Clock/realtime is not supported (the firmware ignores it on USB — see FIRMWARE_NOTES.md), and
+the device does not send MIDI back over USB; this is a one-way command input.
+
 ### Calibrate expression pedals live
 
 With the device connected, **Exp Pedals → Live Calibrate…** streams each pedal's position in

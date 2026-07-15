@@ -111,7 +111,13 @@ def per_record_read_command(cmd: int, rec_num: int, model: int = DEFAULT_MODEL) 
 
 
 def select_preset(transport: Transport, preset_1based: int, midi_chan: int = 0) -> None:
-    """Select a preset on the device via Bank Select (CC0) + Program Change."""
+    """Select a preset on the device via Bank Select (CC0) + Program Change.
+
+    **Hardware-confirmed 2026-07-15**: the LF+ acts on channel-voice CC/PC arriving on the
+    USB-serial UART (in and out of Editor Mode) — but ONLY when the device global
+    "Allow MIDI CMDS" is YES (Config rec 0 value[47]) AND `midi_chan` matches the device's
+    global MIDI channel (Config rec 0 value[49], 0-based). Same mechanism the USB MIDI In
+    Bridge (ui/midi_bridge.py) uses."""
     if not 1 <= preset_1based <= 384:
         return
     n = preset_1based - 1

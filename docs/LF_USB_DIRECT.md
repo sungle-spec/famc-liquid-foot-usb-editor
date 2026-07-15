@@ -127,6 +127,27 @@ interposer) to look for one.
 **Write path for these types is NOT yet verified** — only the read direction has been tested on
 hardware. They stay read-only over USB (not in `_writable_types()`) until a write is confirmed.
 
+### Channel MIDI on the UART — confirmed 2026-07-15 (the "USB MIDI" recovery)
+
+With the device global **"Allow MIDI CMDS = YES"** (Config rec 0 `value[47]`; also gated on the
+global MIDI channel, `value[49]`), the LF+ **acts on channel-voice MIDI sent raw down the
+USB-serial link**: Bank CC#0 + Program Change switches presets, and the manual's CC#1–8 trigger
+set applies (IA on/off/bypass/toggle, page functions, MTC stop/play/cancel). Confirmed on a real
+LF+ 12+ via `scripts/probe_midi_cmds.py` — the LCD followed PC changes sent at 230400 baud on a
+raw port. Two hard limits, both firmware-side:
+
+* **Editor Mode discards MIDI commands.** A PC sent mid-session is not processed (verified: sent
+  "go to preset 4" in Editor Mode, exited — device still on preset 1). Editor transfers and MIDI
+  command input are mutually exclusive uses of the link.
+* Realtime (clock etc.) stays ignored in every state, and the device never sources MIDI on the
+  UART (the complete capture vocabulary above has no device→host stream) — so this is a one-way,
+  commands-only channel, not a full USB-MIDI port.
+
+The editor's **Hardware ▸ USB MIDI In Bridge** (`lfeditor/ui/midi_bridge.py`) builds on this: it
+opens the port raw (no handshake), creates a virtual MIDI input ("LF+ USB") on macOS/Linux — or
+listens on a loopMIDI port on Windows — and forwards CC/PC byte-identical, so a DAW can switch
+presets and fire IA slots over the editor cable. Sysex/realtime are filtered out.
+
 ### The real editor's full session (DYLD-interposer capture)
 
 A DYLD-interposer capture of the official LF+ Editor's serial traffic with a real Foot
