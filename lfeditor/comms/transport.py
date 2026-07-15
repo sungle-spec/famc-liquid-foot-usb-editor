@@ -83,6 +83,28 @@ class SerialTransport:
     def read_frames(self, idle_timeout: float = 1.0, overall_timeout: float = 10.0) -> list[bytes]:
         return split_sysex(self._drain(idle_timeout, overall_timeout))
 
+    def read_one_frame(self, overall_timeout: float = 3.0) -> bytes:
+        """Read until exactly one complete F0..F7 frame has arrived, returning IMMEDIATELY —
+        no idle wait. For protocol paths where the device's reply is always exactly one bounded
+        frame (the per-record read path — see protocol.py), `read_raw`'s idle-timeout drain pays
+        a fixed cost on *every* request just to confirm silence after a reply that already told
+        us it was complete (its own F7 terminator). At ~562 per-record requests in a full pull,
+        that idle wait alone (previously 0.3s) added ~2.8 minutes versus the original editor,
+        which doesn't have this tax — found 2026-07-16 investigating a "hangs on reading
+        device" report that turned out to be this, not an actual device stall. Any bytes after
+        the frame are left for the next read (each request/reply pair is independent)."""
+        buf = bytearray()
+        t0 = time.time()
+        while time.time() - t0 < overall_timeout:
+            n = self.ser.in_waiting
+            chunk = self.ser.read(n if n else 1)
+            if chunk:
+                buf.extend(chunk)
+                frames = split_sysex(bytes(buf))
+                if frames:
+                    return frames[0]
+        return bytes(buf)
+
     def flush_input(self) -> None:
         """Discard any buffered incoming bytes (e.g. trailing live-view stream before a write)."""
         try:
@@ -129,6 +151,18 @@ class MidiTransport:
     # Over MIDI the carrier is already frame-delimited, so raw == frames.
     def read_raw(self, idle_timeout: float = 1.0, overall_timeout: float = 10.0) -> list[bytes]:
         return self.read_frames(idle_timeout, overall_timeout)
+
+    def read_one_frame(self, overall_timeout: float = 3.0) -> bytes:
+        """One sysex message, returned the instant it arrives — no idle wait after (mido
+        already delivers whole messages, so there's nothing to wait for). See
+        SerialTransport.read_one_frame for why this matters for the per-record read path."""
+        t0 = time.time()
+        while time.time() - t0 < overall_timeout:
+            msg = self.inp.poll()
+            if msg is not None and msg.type == "sysex":
+                return bytes([SYSEX_START, *msg.data, SYSEX_END])
+            time.sleep(0.005)
+        return b""
 
     def flush_input(self) -> None:
         while self.inp.poll() is not None:

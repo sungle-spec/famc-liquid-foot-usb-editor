@@ -19,6 +19,7 @@ class _DeviceTask(QThread):
     """Runs one blocking device call off the UI thread; emits the result or an error string."""
     ok = Signal(object)
     err = Signal(str)
+    progress = Signal(str)   # only used when the caller opts in (see MainWindow._run_device)
 
     def __init__(self, fn, parent=None):
         super().__init__(parent)
@@ -344,10 +345,19 @@ class MainWindow(QMainWindow):
         if busy:
             self._set_conn(msg, AMBER)   # amber = working
 
-    def _run_device(self, fn, on_ok, busy_msg, fail_title):
-        """Run `fn` (a blocking device call) on a worker; route result to `on_ok`."""
+    def _run_device(self, fn, on_ok, busy_msg, fail_title, wants_progress=False):
+        """Run `fn` (a blocking device call) on a worker; route result to `on_ok`.
+
+        With `wants_progress=True`, `fn` is called as `fn(emit)` where `emit(msg)` updates the
+        status-bar text live (queued across threads by Qt's signal/slot mechanism) — for a call
+        that can legitimately take minutes (e.g. the ~562-request per-record sweep), a static
+        busy message is indistinguishable from a hang; see the 2026-07-16 forum report that
+        turned out to be exactly this."""
         self._set_busy(True, busy_msg)
-        task = self._task = _DeviceTask(fn, self)
+        task = self._task = _DeviceTask(None, self)
+        task._fn = (lambda: fn(task.progress.emit)) if wants_progress else fn
+        if wants_progress:
+            task.progress.connect(lambda msg: self._set_conn(msg, AMBER))
 
         def done(result):
             self._set_busy(False)
@@ -436,9 +446,25 @@ class MainWindow(QMainWindow):
     def pull_from_device(self):
         """Read the device's records and overlay them onto the loaded dump (or load fresh)."""
         from ..comms import pull_dump, MODEL_FOOT
+        from ..comms.protocol import FOOT_PER_RECORD_CMDS
         if self.transport is None:
             return
         read_types = self._read_types()
+        # cumulative offset of each per-record cmd within the combined Song/Setlist/IASwitch
+        # sweep, so progress can report one running "(done/total)" like the web build already
+        # does (web/serial.js Device.pull()) instead of restarting the count per type.
+        per_record_total = sum(count for _rt, count in FOOT_PER_RECORD_CMDS.values())
+        per_record_offset, _acc = {}, 0
+        for _cmd, (_rt, _count) in FOOT_PER_RECORD_CMDS.items():
+            per_record_offset[_cmd] = _acc
+            _acc += _count
+
+        def work(emit):
+            def on_progress(cmd, rec_num, count):
+                done = per_record_offset[cmd] + rec_num + 1
+                if done % 25 == 0 or done == per_record_total:
+                    emit(f"reading device… Songs/Set-Lists/IA-Switches ({done}/{per_record_total})")
+            return pull_dump(self.transport, MODEL_FOOT, on_progress=on_progress)
 
         def ok(dev):
             if self.dump is None:
@@ -463,8 +489,7 @@ class MainWindow(QMainWindow):
             self._refresh_conn_label()
             QMessageBox.information(self, "From LF+", note)
 
-        self._run_device(lambda: pull_dump(self.transport, MODEL_FOOT), ok,
-                         "reading device…", "From LF+ failed")
+        self._run_device(work, ok, "reading device…", "From LF+ failed", wants_progress=True)
 
     def push_to_device(self):
         """Write every record the user edited since the last load/read (gated, ACK-verified)."""
@@ -614,22 +639,26 @@ class MainWindow(QMainWindow):
             if kind == "from":
                 rec_num = [f for f in self.dump.frames if f.type == type_][index].rec_num
 
-                def work():
+                def work(_emit):
                     fr = pull_one_record_per_record(self.transport, type_, rec_num, MODEL_FOOT)
                     return Dump(frames=[fr] if fr else [])
             else:
                 cmd = PER_RECORD_CMD_FOR_TYPE[type_]
 
-                def work():
-                    return Dump(frames=pull_records_per_record(self.transport, MODEL_FOOT, cmds=[cmd]))
+                def work(emit):
+                    def on_progress(_cmd, rec_num, count):
+                        if (rec_num + 1) % 25 == 0 or rec_num + 1 == count:
+                            emit(f"reading {tname}… ({rec_num + 1}/{count})")
+                    return Dump(frames=pull_records_per_record(
+                        self.transport, MODEL_FOOT, cmds=[cmd], on_progress=on_progress))
         else:
             cmd = READ_CMD_FOR_TYPE.get(type_)
             cmds = [cmd] if cmd is not None else None
 
-            def work():
+            def work(_emit):
                 return pull_dump(self.transport, MODEL_FOOT, cmds=cmds, per_record=False)
 
-        self._run_device(work, ok, f"reading {tname}…", "From LF+ failed")
+        self._run_device(work, ok, f"reading {tname}…", "From LF+ failed", wants_progress=True)
 
     # --- file ops ---
     def open_file(self):

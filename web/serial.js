@@ -51,6 +51,30 @@ class WebSerialLink {
     for (const c of out) { res.set(c, o); o += c.length; }
     return res;
   }
+  // Read until exactly one complete F0..F7 frame has arrived, returning IMMEDIATELY — no idle
+  // wait. Mirrors lfeditor/comms/transport.py::SerialTransport.read_one_frame: for a reply
+  // that's always exactly one bounded frame (the per-record read path), `drain`'s idle wait
+  // pays a fixed cost on *every* request just to reconfirm silence the frame's own F7
+  // terminator already implied. Found 2026-07-16 chasing a "hangs on reading device" report
+  // that turned out to be this slowness (desktop had the same tax; fixed there too).
+  async drainOneFrame(overallMs) {
+    const start = Date.now(); const out = [];
+    let total = 0;
+    while (Date.now() - start < overallMs) {
+      if (this.chunks.length) {
+        while (this.chunks.length) { const c = this.chunks.shift(); out.push(c); total += c.length; }
+        const buf = new Uint8Array(total); let o = 0;
+        for (const c of out) { buf.set(c, o); o += c.length; }
+        const s = buf.indexOf(0xF0);
+        if (s !== -1) {
+          const e = buf.indexOf(0xF7, s + 1);
+          if (e !== -1) return buf.slice(s, e + 1);
+        }
+      }
+      await sleep(10);
+    }
+    return new Uint8Array(0);
+  }
   async close() {
     this._run = false;
     try { this.reader && await this.reader.cancel(); } catch (_e) {}
@@ -105,21 +129,31 @@ const Device = {
     counts.destroy();
 
     // Songs/Set-Lists/IA-Switches: the 2013-editor-style PER-RECORD path (one request per
-    // record, one genuine .syx frame back — confirmed on hardware 2026-07-15). Each reply is
-    // a single bounded frame, so a short idle timeout is enough (the device goes quiet right
-    // after); this is ~562 requests end to end and noticeably slower than the bulk path above.
+    // record, one genuine .syx frame back — confirmed on hardware 2026-07-15). Each reply is a
+    // single bounded frame, so drainOneFrame returns the instant it sees the F7 terminator —
+    // no idle wait (see WebSerialLink.drainOneFrame; this is ~562 requests end to end, and the
+    // old drain(300, …) idle tax alone cost ~2.8 min versus the original editor, found
+    // 2026-07-16 chasing a "hangs on reading device" report). MAX_CONSECUTIVE_MISSES mirrors
+    // lfeditor/comms/protocol.py: a device that has stopped answering ENTIRELY for a type
+    // (wrong firmware, wedged link) must not burn the full 3s timeout on every remaining slot.
+    // A real hit resets the streak, so sparse-but-populated data (not every slot need be used)
+    // isn't cut short by scattered gaps.
+    const MAX_CONSECUTIVE_MISSES = 30;
     const perRecordCmds = App.session.dev_per_record_cmds().toJs(); // [[cmd, rtype, count], …]
     let done = 0;
     const total = perRecordCmds.reduce((n, [, , count]) => n + count, 0);
     for (const [cmd, , count] of perRecordCmds) {
+      let misses = 0;
       for (let recNum = 0; recNum < count; recNum++) {
         await this.link.write(u8(App.session.dev_per_record_command(cmd, recNum)));
-        const data = await this.link.drain(300, 3000);
-        if (data.length) App.session.dev_ingest_per_record(data);
+        const data = await this.link.drainOneFrame(3000);
+        if (data.length) { App.session.dev_ingest_per_record(data); misses = 0; }
+        else if (++misses >= MAX_CONSECUTIVE_MISSES) { done += count - recNum; break; }
         done++;
         if (done % 25 === 0 || done === total) deviceMsg(`Reading Songs/Set-Lists/IA-Switches… (${done}/${total})`);
       }
     }
+    if (done === total) deviceMsg(`Reading Songs/Set-Lists/IA-Switches… (${done}/${total})`);
 
     const finalCounts = App.pyodide.runPython("session.counts()").toJs();
     onDeviceRead("LF+ device read", finalCounts);

@@ -119,6 +119,21 @@ couldn't — see `lfeditor/comms/protocol.py`'s `FOOT_PER_RECORD_CMDS` / `pull_r
 `web/serial.js`'s `Device.pull()`). Because it's ~562 individual round trips (254+128+180
 records), it's noticeably slower than the bulk path — expect it to dominate a full "From LF+".
 
+**Read timing, fixed 2026-07-16.** A forum report of "From LF+" hanging on "reading device…"
+traced to two issues, both now fixed: (1) each reply is a single bounded frame (device goes
+quiet right after), but the original read used an idle-timeout drain that waits `idle_timeout`
+seconds of silence *after* the frame's own `F7` terminator before returning — a fixed 0.3s tax
+on *every* request, ~2.8 minutes of pure removable overhead across 562 requests, even when
+every request succeeds instantly. This — not device stalls — is why the original editor felt
+much faster. Fixed with `SerialTransport.read_one_frame()` / `MidiTransport.read_one_frame()`
+(`lfeditor/comms/transport.py`), which return the instant a complete frame is seen; mirrored in
+`web/serial.js` as `WebSerialLink.drainOneFrame()`. (2) A device that stops answering per-record
+requests entirely (older firmware, a wedged link) would otherwise burn the full per-request
+timeout on every remaining slot — up to ~28 minutes with zero UI feedback. Fixed with a bounded
+consecutive-miss bail-out (`MAX_CONSECUTIVE_MISSES = 30` in protocol.py, mirrored in serial.js)
+plus live "(done/total)" progress on both desktop and web, so a genuinely slow/failing pull is
+now visible and bounded instead of indistinguishable from a hang.
+
 **Still not exposed over USB by any known request:** Page (7) — the 2013 editor's own `SendMsg`
 command table has no case for `GET_PAGE` at all, so there's no known per-record command either.
 Edit Pages offline in the `.syx`, or capture the real editor's full read sequence (DYLD

@@ -221,34 +221,73 @@ def pull_records(transport: Transport, model: int = DEFAULT_MODEL,
     return out
 
 
+#: A slot legitimately not being populated is expected (see docstring below), so a handful of
+#: misses in a row is normal. But a device that has stopped answering ENTIRELY for a type (wrong
+#: firmware, wedged link) would otherwise burn the full 3.0s timeout on every remaining slot —
+#: up to ~28 minutes across all 562 requests with zero UI feedback, indistinguishable from a
+#: true hang (this is what a 2026-07-16 forum report turned out to be). Bailing out after this
+#: many CONSECUTIVE misses (reset by any hit) bounds the worst case to ~2-4 minutes instead,
+#: without risking a false trigger on real sparse-but-populated data (30 unpopulated slots in a
+#: row, in what's usually a contiguously-filled list, is an extreme case) — and it's non-
+#: destructive: a bailed-out type just has fewer records refreshed this pull, recoverable via a
+#: manual per-record "From LF+" (pull_one_record_per_record) on the specific slot if needed.
+MAX_CONSECUTIVE_MISSES = 30
+
+
+def _read_one_reply(transport: Transport, overall_timeout: float = 3.0) -> bytes:
+    """Read exactly one per-record reply — via the fast frame-boundary-aware
+    `transport.read_one_frame` when the transport supports it (real `SerialTransport`/
+    `MidiTransport`), else the generic idle-timeout `read_raw` (test fakes and any other
+    Transport that hasn't grown the new method).
+
+    **Why this matters:** each per-record reply is always exactly one bounded F0..F7 frame, so
+    waiting for it is really "wait for the terminating F7", not "wait until nothing has arrived
+    for a while" — but `read_raw`'s idle-timeout drain does the latter, paying a fixed
+    idle_timeout tax on *every single request* just to reconfirm silence the F7 already implied.
+    At ~562 requests in a full per-record sweep, that tax alone (0.3s) added ~2.8 minutes versus
+    the original editor, which doesn't pay it — found 2026-07-16 chasing a "hangs on reading
+    device" report that turned out to be this slowness, not an actual device stall (the earlier
+    MAX_CONSECUTIVE_MISSES bail-out below handles the *genuine*-stall case; this handles the
+    *not actually stalled, just slower than it needs to be* case, which was the bigger factor)."""
+    read_one = getattr(transport, "read_one_frame", None)
+    if read_one is not None:
+        return read_one(overall_timeout=overall_timeout)
+    return b"".join(transport.read_raw(idle_timeout=0.3, overall_timeout=overall_timeout))
+
+
 def pull_records_per_record(transport: Transport, model: int = DEFAULT_MODEL,
-                            cmds=None, on_progress=None) -> list[Frame]:
+                            cmds=None, on_progress=None,
+                            max_consecutive_misses: int = MAX_CONSECUTIVE_MISSES) -> list[Frame]:
     """Read Song/Setlist/IASwitch one record at a time (see FOOT_PER_RECORD_CMDS) — the path
     the bulk get-commands in FOOT_READ_CMDS cannot reach.
 
     Assumes `connect()` has already put the device in Editor Mode. Unlike `pull_records`, the
     device's reply to each request is already a genuine .syx record frame, so it is parsed
     directly with no header synthesis. A record the device doesn't answer for is skipped (not
-    every slot need be populated). `on_progress(cmd, rec_num, count)` is called before each
-    request, if given, since this is ~562 requests end to end and noticeably slower than the
-    bulk path. Each reply is a single bounded frame (the device goes quiet immediately after),
-    so reads use a short idle timeout rather than `read_raw`'s 1.0s default — inferred from wire
-    timing (a continuous burst has no multi-hundred-ms inter-byte gaps at 230400 baud), not yet
-    independently re-timed on hardware beyond the 0.8s the original probe used successfully;
-    revisit if a future session sees dropped replies."""
+    every slot need be populated) — but `max_consecutive_misses` unanswered requests IN A ROW for
+    one type gives up on the REST of that type's range (see MAX_CONSECUTIVE_MISSES) rather than
+    grinding through every remaining slot's full timeout. `on_progress(cmd, rec_num, count)` is
+    called before each request, if given, since this is ~562 requests end to end. Each reply is
+    read via `_read_one_reply` (fast frame-boundary-aware read on real hardware — see its
+    docstring for why the naive idle-timeout drain was the actual cause of a "hangs" report)."""
     cmds = list(FOOT_PER_RECORD_CMDS) if cmds is None else list(cmds)
     frames: list[Frame] = []
     for cmd in cmds:
         if cmd not in FOOT_PER_RECORD_CMDS:
             continue
         _rtype, count = FOOT_PER_RECORD_CMDS[cmd]
+        misses = 0
         for rec_num in range(count):
             if on_progress:
                 on_progress(cmd, rec_num, count)
             transport.send(per_record_read_command(cmd, rec_num, model))
-            data = b"".join(transport.read_raw(idle_timeout=0.3, overall_timeout=3.0))
+            data = _read_one_reply(transport)
             if not data:
+                misses += 1
+                if misses >= max_consecutive_misses:
+                    break
                 continue
+            misses = 0
             try:
                 frames.append(Frame.parse(data))
             except ValueError:
@@ -267,7 +306,7 @@ def pull_one_record_per_record(transport: Transport, type_: int, rec_num: int,
     if cmd is None:
         return None
     transport.send(per_record_read_command(cmd, rec_num, model))
-    data = b"".join(transport.read_raw(idle_timeout=0.3, overall_timeout=3.0))
+    data = _read_one_reply(transport)
     if not data:
         return None
     try:
@@ -277,15 +316,18 @@ def pull_one_record_per_record(transport: Transport, type_: int, rec_num: int,
 
 
 def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
-              per_record: bool = True) -> Dump:
+              per_record: bool = True, on_progress=None) -> Dump:
     """Full read: handshake, pull every readable data type, wrap into a Dump.
 
     Bulk-path records (FOOT_READ_CMDS) are synthesised from the decoded values using a
     per-type header template so they re-encode to the device's .syx frame format (and can be
     written back). Per-record types (Song/Setlist/IASwitch, see FOOT_PER_RECORD_CMDS) are
     fetched one at a time and used as-is — pass `per_record=False` to skip them (e.g. for a
-    quick preset-only pull). The handshake is sent here; callers that already connected can
-    pass an open, post-handshake transport — a second handshake is harmless."""
+    quick preset-only pull). `on_progress` is forwarded to `pull_records_per_record` — wire it
+    up so the caller can show live progress during the ~562-request per-record sweep, which is
+    otherwise indistinguishable from a hang (see MAX_CONSECUTIVE_MISSES). The handshake is sent
+    here; callers that already connected can pass an open, post-handshake transport — a second
+    handshake is harmless."""
     connect(transport, model)
     recs = pull_records(transport, model, cmds)
     dump = Dump()
@@ -293,7 +335,7 @@ def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
         for rec_num, values in enumerate(value_lists):
             dump.frames.append(_synth_frame(rtype, rec_num, values, model))
     if per_record:
-        dump.frames.extend(pull_records_per_record(transport, model))
+        dump.frames.extend(pull_records_per_record(transport, model, on_progress=on_progress))
     return dump
 
 

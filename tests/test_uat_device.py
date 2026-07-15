@@ -88,7 +88,8 @@ def _win(qapp, transport=None):
     w.load(RJM)
     # Run device work inline so assertions see the result immediately (faithful: only the
     # threading is removed; fn() and on_ok() are the real ones).
-    w._run_device = lambda fn, on_ok, busy, title: on_ok(fn())
+    w._run_device = lambda fn, on_ok, busy, title, wants_progress=False: \
+        on_ok(fn(lambda msg: None) if wants_progress else fn())
     if transport is not None:
         w.transport = transport
     return w

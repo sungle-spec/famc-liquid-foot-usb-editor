@@ -198,6 +198,62 @@ def test_pull_records_per_record_skips_unanswered_and_unparseable():
     assert got == []
 
 
+def test_pull_records_per_record_bails_out_after_consecutive_misses():
+    """A device that never answers a type (wrong firmware / wedged link) must not grind through
+    every remaining slot's full timeout — see the 2026-07-16 forum "hangs on reading device"
+    report, which turned out to be exactly this (up to ~28 min of silent, feedback-free waiting
+    across all 562 per-record requests)."""
+    t = FakeTransport(replies=[])   # every read_raw() call returns "no reply"
+    got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0B], max_consecutive_misses=3)
+    assert got == []
+    assert len(t.sent) == 3   # gave up after 3 consecutive misses, not all 254 Song slots
+
+
+class FakeFastTransport(FakeTransport):
+    """Adds read_one_frame — the fast frame-boundary-aware path real transports use for
+    per-record reads (see protocol.py::_read_one_reply). Tracks which read method was called."""
+    def __init__(self, replies=()):
+        super().__init__(replies)
+        self.read_raw_calls = 0
+        self.read_one_frame_calls = 0
+
+    def read_raw(self, idle_timeout=1.0, overall_timeout=10.0):
+        self.read_raw_calls += 1
+        return super().read_raw(idle_timeout, overall_timeout)
+
+    def read_one_frame(self, overall_timeout=3.0):
+        self.read_one_frame_calls += 1
+        if not self._replies:
+            return b""
+        item = self._replies.pop(0)
+        return item or b""
+
+
+def test_pull_records_per_record_prefers_read_one_frame_when_available():
+    """The whole point of read_one_frame: skip the idle-timeout tax that turned a normal pull
+    into a multi-minute-slower-than-the-original-editor wait (2026-07-16 investigation)."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    t = FakeFastTransport(replies=[song0.to_bytes()])
+    got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0B], max_consecutive_misses=1)
+    assert len(got) == 1 and got[0].values == song0.values
+    assert t.read_one_frame_calls == 2 and t.read_raw_calls == 0   # 1 hit, then 1 miss -> bail
+
+
+def test_pull_records_per_record_miss_streak_resets_on_a_hit():
+    """A real hit resets the consecutive-miss counter — sparse-but-populated data (normal: not
+    every slot need be used) must not trip the bail-out just because of scattered gaps."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    hit = song0.to_bytes()
+    # miss, miss, HIT, miss, miss, HIT, then the transport genuinely runs dry (3 more misses ->
+    # bail-out fires there, not on the earlier scattered pairs).
+    t = FakeTransport(replies=[b"", b"", hit, b"", b"", hit])
+    got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0B], max_consecutive_misses=3)
+    assert len(got) == 2
+    assert len(t.sent) == 9   # 6 handled replies + 3 more misses before the bail-out triggers
+
+
 def test_foot_per_record_cmds_consistent_with_factory_dump():
     """Every per-record type's count matches the shipped factory dump (public fixture)."""
     factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
