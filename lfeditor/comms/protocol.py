@@ -63,8 +63,27 @@ FOOT_READ_CMDS: dict[int, tuple[int, int]] = {
     0x0C: (8, 100),    # IAMap
     0x10: (11, 96),    # SongExt11
 }
-# Song(2) / Setlist(5) / Page(7) / IASwitch(3) raw records are not exposed over this USB path
-# (the device's editor-mode read set is a subset, as on the Router). Edit them offline.
+# reverse lookup: record type -> its bulk get-command byte
+READ_CMD_FOR_TYPE: dict[int, int] = {rt: cmd for cmd, (rt, _l) in FOOT_READ_CMDS.items()}
+# Page(7) raw records are not exposed over this USB path at all: the 2013 editor's own
+# SendMsg command table (see FOOT_PER_RECORD_CMDS below) has no case for GET_PAGE, so there is
+# no known request that reaches it either. Edit Pages offline.
+
+# 2013-editor-style PER-RECORD read: `F0 00 00 <id> 00 <cmd> 02 <recnum 4 nibbles> F7`, one
+# request per record, one genuine .syx record frame back (parseable directly via Frame.parse —
+# unlike FOOT_READ_CMDS's bulk stream, no header synthesis needed). **Confirmed on hardware
+# 2026-07-15**: this is how Song/Setlist/IASwitch — types the bulk get-commands above can't
+# reach — actually transfer over USB; it's why the original 2013/Xojo editors could read them
+# and this modern bulk-only path couldn't. `recnum` is 0-based, matching the on-disk record
+# number exactly (verified: requesting recnum=1 returns the on-disk rec_num=1 record, byte-
+# identical). cmd -> (record_type, record_count).
+FOOT_PER_RECORD_CMDS: dict[int, tuple[int, int]] = {
+    0x0B: (2, 254),   # Song
+    0x0D: (5, 128),   # Setlist
+    0x0C: (3, 180),   # IASwitch
+}
+# reverse lookup: record type -> its per-record cmd byte
+PER_RECORD_CMD_FOR_TYPE: dict[int, int] = {rt: cmd for cmd, (rt, _c) in FOOT_PER_RECORD_CMDS.items()}
 
 
 def frame_bytes(model: int, *body: int) -> bytes:
@@ -80,6 +99,15 @@ def handshake_frame(model: int = DEFAULT_MODEL) -> bytes:
 def read_command(x: int, model: int = DEFAULT_MODEL) -> bytes:
     """A get-command frame requesting data type `x` (see FOOT_READ_CMDS)."""
     return frame_bytes(model, *READ_PREFIX, x)
+
+
+def per_record_read_command(cmd: int, rec_num: int, model: int = DEFAULT_MODEL) -> bytes:
+    """A per-record get-command frame requesting one record by (0-based) number.
+
+    See FOOT_PER_RECORD_CMDS. `cmd` is the 2013 SendMsg wire byte for the type."""
+    return frame_bytes(model, 0x00, cmd, 0x02,
+                        (rec_num >> 12) & 0xF, (rec_num >> 8) & 0xF,
+                        (rec_num >> 4) & 0xF, rec_num & 0xF)
 
 
 def select_preset(transport: Transport, preset_1based: int, midi_chan: int = 0) -> None:
@@ -187,19 +215,79 @@ def pull_records(transport: Transport, model: int = DEFAULT_MODEL,
     return out
 
 
-def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None) -> Dump:
+def pull_records_per_record(transport: Transport, model: int = DEFAULT_MODEL,
+                            cmds=None, on_progress=None) -> list[Frame]:
+    """Read Song/Setlist/IASwitch one record at a time (see FOOT_PER_RECORD_CMDS) — the path
+    the bulk get-commands in FOOT_READ_CMDS cannot reach.
+
+    Assumes `connect()` has already put the device in Editor Mode. Unlike `pull_records`, the
+    device's reply to each request is already a genuine .syx record frame, so it is parsed
+    directly with no header synthesis. A record the device doesn't answer for is skipped (not
+    every slot need be populated). `on_progress(cmd, rec_num, count)` is called before each
+    request, if given, since this is ~562 requests end to end and noticeably slower than the
+    bulk path. Each reply is a single bounded frame (the device goes quiet immediately after),
+    so reads use a short idle timeout rather than `read_raw`'s 1.0s default — inferred from wire
+    timing (a continuous burst has no multi-hundred-ms inter-byte gaps at 230400 baud), not yet
+    independently re-timed on hardware beyond the 0.8s the original probe used successfully;
+    revisit if a future session sees dropped replies."""
+    cmds = list(FOOT_PER_RECORD_CMDS) if cmds is None else list(cmds)
+    frames: list[Frame] = []
+    for cmd in cmds:
+        if cmd not in FOOT_PER_RECORD_CMDS:
+            continue
+        _rtype, count = FOOT_PER_RECORD_CMDS[cmd]
+        for rec_num in range(count):
+            if on_progress:
+                on_progress(cmd, rec_num, count)
+            transport.send(per_record_read_command(cmd, rec_num, model))
+            data = b"".join(transport.read_raw(idle_timeout=0.3, overall_timeout=3.0))
+            if not data:
+                continue
+            try:
+                frames.append(Frame.parse(data))
+            except ValueError:
+                continue
+    return frames
+
+
+def pull_one_record_per_record(transport: Transport, type_: int, rec_num: int,
+                               model: int = DEFAULT_MODEL) -> Frame | None:
+    """Read a single Song/Setlist/IASwitch record by (type, 0-based rec_num).
+
+    For scoped single-record refreshes (e.g. a per-record "From LF+" button) — much cheaper
+    than pulling the whole type's range via `pull_records_per_record`. Returns None if `type_`
+    isn't a per-record type or the device didn't answer."""
+    cmd = PER_RECORD_CMD_FOR_TYPE.get(type_)
+    if cmd is None:
+        return None
+    transport.send(per_record_read_command(cmd, rec_num, model))
+    data = b"".join(transport.read_raw(idle_timeout=0.3, overall_timeout=3.0))
+    if not data:
+        return None
+    try:
+        return Frame.parse(data)
+    except ValueError:
+        return None
+
+
+def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
+              per_record: bool = True) -> Dump:
     """Full read: handshake, pull every readable data type, wrap into a Dump.
 
-    Records are synthesised from the decoded values using a per-type header template so they
-    re-encode to the device's .syx frame format (and can be written back). The handshake is
-    sent here; callers that already connected can pass an open, post-handshake transport — a
-    second handshake is harmless."""
+    Bulk-path records (FOOT_READ_CMDS) are synthesised from the decoded values using a
+    per-type header template so they re-encode to the device's .syx frame format (and can be
+    written back). Per-record types (Song/Setlist/IASwitch, see FOOT_PER_RECORD_CMDS) are
+    fetched one at a time and used as-is — pass `per_record=False` to skip them (e.g. for a
+    quick preset-only pull). The handshake is sent here; callers that already connected can
+    pass an open, post-handshake transport — a second handshake is harmless."""
     connect(transport, model)
     recs = pull_records(transport, model, cmds)
     dump = Dump()
     for rtype, value_lists in recs.items():
         for rec_num, values in enumerate(value_lists):
             dump.frames.append(_synth_frame(rtype, rec_num, values, model))
+    if per_record:
+        dump.frames.extend(pull_records_per_record(transport, model))
     return dump
 
 

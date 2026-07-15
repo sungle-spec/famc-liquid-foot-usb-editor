@@ -97,6 +97,34 @@ bits as friendly controls — not missing storage.
 double-tap latency, expander ("X-Series") going out of beta. These are runtime behaviours with no
 stored field — nothing for the editor to add.
 
+> **On the original "USB MIDI function"** (asked about on the forum): with FAMC's old macOS
+> driver the LF+ appeared as a native **CoreMIDI port** over USB, and the 2013 editor drove it
+> entirely through `javax.sound.midi`. That driver-level MIDI port is what people remember —
+> but even then, realtime **MIDI clock was never carried over USB** (no clock/thru code exists
+> in the decompiled editor); tempo-LED sync has always been a MIDI-DIN-IN feature of the device
+> firmware.
+>
+> **Confirmed on hardware 2026-07-15** (`scripts/probe_usb_midi.py`, a real Liquid Foot+ 12+):
+> streamed MIDI realtime clock (`0xF8`, 24 ppqn) down the USB-serial link at 120 BPM across three
+> device states — no handshake at all, mid-handshake, and just after leaving Editor Mode — with
+> the tempo LED watched directly. **No reaction in any state**, across two runs. The device also
+> never emitted a single byte on the UART on its own (tested by pressing buttons/switching
+> presets while listening), ruling out a bidirectional USB-MIDI bridge too. The serial link is
+> confirmed strictly one-way and non-MIDI in practice, exactly as the wire-format docs above say.
+>
+> **The official LF+ manual backs this up independently.** Its "MIDI Implementation" chart (the
+> very last page, PDF p.97) lists the *complete* set of MIDI commands the device accepts —
+> Bank Change, Program Change, Trigger IA (ON/OFF/BYPASS/TOGGLE), Page-function press, and MTC
+> Stop/Play/Cancel — eight commands total, all standard PC/CC messages. **MIDI Clock isn't in
+> that list at all, on either DIN or USB.** "Tap Tempo" (manual p.72) is the device *calculating
+> and displaying* a tempo from foot taps, not receiving external clock; "Sync"/"External Sync"
+> throughout the manual means AXE-FX/Kemper effect-parameter mirroring, a different feature
+> entirely. So DIN clock-sync (if it works at all, per the forum report) isn't an officially
+> documented device feature either — the editor cannot add or bridge what the firmware's own
+> published MIDI implementation never advertised as a receivable command. Our MIDI Monitor /
+> Pass-Thru already relays clock to a device's DIN input via any USB-MIDI interface, which
+> remains the practical path for users who want external clock into the unit.
+
 ## Does the firmware reveal editor features we're missing?
 
 The firmware itself mostly confirms fields we already model. The **editor** release notes

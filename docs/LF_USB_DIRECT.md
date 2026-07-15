@@ -4,7 +4,9 @@
 > Mac, no kext / DriverKit extension / Developer account. Validated against a real Liquid Foot+
 > (a full 384-preset reference rig). This is the source of truth for `lfeditor/comms/`.
 > The same protocol also works from the **browser** (WebSerial, Chrome/Edge): verified on the
-> same hardware 2026-07-13 — see [WEBSERIAL.md](WEBSERIAL.md).
+> same hardware 2026-07-13 — see [WEBSERIAL.md](WEBSERIAL.md). Song/Setlist/IASwitch also
+> transfer over USB via a separate per-record request, confirmed 2026-07-15 (below) — read-only
+> for now.
 
 The Foot reuses the **exact** USB-serial protocol first cracked for the sibling FAMC Liquid
 Router (a separate, private reverse-engineering project); only the **MODEL byte changes**
@@ -93,11 +95,37 @@ still running** (no `CC`, no `CA`):
 > bug. (A session that didn't save calibration disconnects cleanly.) The dialog therefore writes
 > during the live stream and resumes it; it only sends `CC`/`CA` on close.
 
-**Not exposed over this USB path:** the raw Song (2), Setlist (5), Page (7) and IASwitch (3)
-records never returned from any get-command (`01`–`20`, `C9`–`CF` all probed). The device's
-editor-mode read set is a subset — the same situation the Router had (it exposed only
-presets / loop-defs / global over USB). Edit those types offline in the `.syx` and write the
-others back; or capture the real editor's full read sequence (DYLD interposer) to extend the map.
+**Not exposed over the *bulk* get-commands above:** Song (2), Setlist (5), Page (7) and IASwitch
+(3) never returned from any bulk get-command (`01`–`20`, `C9`–`CF` all probed) — the device's
+bulk editor-mode read set is a subset, the same situation the Router had (it exposed only
+presets / loop-defs / global over USB that way).
+
+### Per-record read — Song/Setlist/IASwitch, confirmed on hardware 2026-07-15
+
+The bulk get-commands are not how the 2013 editor read these types. It requested records **one
+at a time** with a different frame — `F0 00 00 <id> 00 <cmd> 02 <recnum as 4 nibbles> F7`, cmd
+`0x0A` preset, **`0x0B` song**, `0x09` sysex-msg, **`0x0C` ia-switch**, **`0x0D` setlist**,
+`0x0E` config, `0x0F` connection-test (decompiled `MidiFootController.SendMsg`) — and got back
+one genuine, nibble-encoded `.syx` record frame per request. **This framing still works on the
+modern serial link**, confirmed with `scripts/probe_per_record.py` against a real Liquid Foot+
+12+: Song, Setlist, and IASwitch all answered, byte-identical to the on-disk `.syx` format, both
+with and without the Editor-Mode handshake first. `recnum` is **0-based and matches the on-disk
+record number exactly** (verified: requesting recnum=1 returns the on-disk `rec_num=1` record).
+
+This is why the original editor could transfer Songs/Set-Lists over USB and the bulk-only path
+couldn't — see `lfeditor/comms/protocol.py`'s `FOOT_PER_RECORD_CMDS` / `pull_records_per_record`
+/ `pull_one_record_per_record`, wired into the desktop app and the web WebSerial bridge
+(`lfeditor/webapi.py`'s `dev_per_record_cmds`/`dev_per_record_command`/`dev_ingest_per_record`,
+`web/serial.js`'s `Device.pull()`). Because it's ~562 individual round trips (254+128+180
+records), it's noticeably slower than the bulk path — expect it to dominate a full "From LF+".
+
+**Still not exposed over USB by any known request:** Page (7) — the 2013 editor's own `SendMsg`
+command table has no case for `GET_PAGE` at all, so there's no known per-record command either.
+Edit Pages offline in the `.syx`, or capture the real editor's full read sequence (DYLD
+interposer) to look for one.
+
+**Write path for these types is NOT yet verified** — only the read direction has been tested on
+hardware. They stay read-only over USB (not in `_writable_types()`) until a write is confirmed.
 
 ### The real editor's full session (DYLD-interposer capture)
 

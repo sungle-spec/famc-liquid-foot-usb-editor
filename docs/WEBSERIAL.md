@@ -28,16 +28,18 @@ WebSerial — the **Connect** button is disabled there.
 
 1. **Connect** — pick the LF+'s serial port; the app handshakes it into Editor Mode (the device LCD
    shows "Editor Mode"). The dot turns green.
-2. **From LF+** — reads every USB-exposed data type (Presets, Config, IA-Maps, Sysex messages, and
-   the preset/song label extension records) into the editor. Non-destructive.
+2. **From LF+** — reads every USB-exposed data type (Presets, Config, IA-Maps, Sysex messages, the
+   preset/song label extension records, and Songs/Set-Lists/IA-Switches via a slower per-record
+   pass) into the editor. Non-destructive.
 3. **To LF+** — writes the *current* record back (gated behind a confirm). Keep a backup;
    there is no undo. The device ACKs each write (`F0 09 F7`).
 4. **Disconnect** — leaves Editor Mode and closes the port.
 
 ## Limits
 
-- **Songs / Set-Lists / Pages / IA-Switches are not exposed over the USB read set** (same as the
-  desktop USB path — the device's editor-mode read set is a subset). Edit those offline and save a
+- **Songs / Set-Lists / IA-Switches transfer over USB via a per-record request** (confirmed on
+  hardware 2026-07-15) — read-only for now; the write path for these types hasn't been verified.
+  **Page records are not exposed over USB by any known request** — edit those offline and save a
   `.syx`.
 - No live expression-pedal calibration view yet (the desktop has it; it's a streaming `D2` mode).
 - **Always keep a `.syx` backup before writing** — writes have no undo.

@@ -102,9 +102,28 @@ const Device = {
     }
     const pyObj = App.pyodide.toPy(recordsByType);
     const counts = App.session.dev_load(pyObj); pyObj.destroy();
-    const c = counts.toJs(); counts.destroy();
-    onDeviceRead("LF+ device read", c);
-    deviceMsg("Read complete. (Songs / Set-Lists / Pages / IA-Switches aren't exposed over USB — edit those offline.)");
+    counts.destroy();
+
+    // Songs/Set-Lists/IA-Switches: the 2013-editor-style PER-RECORD path (one request per
+    // record, one genuine .syx frame back — confirmed on hardware 2026-07-15). Each reply is
+    // a single bounded frame, so a short idle timeout is enough (the device goes quiet right
+    // after); this is ~562 requests end to end and noticeably slower than the bulk path above.
+    const perRecordCmds = App.session.dev_per_record_cmds().toJs(); // [[cmd, rtype, count], …]
+    let done = 0;
+    const total = perRecordCmds.reduce((n, [, , count]) => n + count, 0);
+    for (const [cmd, , count] of perRecordCmds) {
+      for (let recNum = 0; recNum < count; recNum++) {
+        await this.link.write(u8(App.session.dev_per_record_command(cmd, recNum)));
+        const data = await this.link.drain(300, 3000);
+        if (data.length) App.session.dev_ingest_per_record(data);
+        done++;
+        if (done % 25 === 0 || done === total) deviceMsg(`Reading Songs/Set-Lists/IA-Switches… (${done}/${total})`);
+      }
+    }
+
+    const finalCounts = App.pyodide.runPython("session.counts()").toJs();
+    onDeviceRead("LF+ device read", finalCounts);
+    deviceMsg("Read complete. (Page records aren't exposed over USB — edit those offline.)");
   },
 
   async writeCurrent(type_, idx) {

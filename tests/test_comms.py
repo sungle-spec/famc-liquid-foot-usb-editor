@@ -15,6 +15,7 @@ from lfeditor.comms import (
     handshake_frame, read_command, connect, pull_records, pull_dump, send_record,
     select_preset, FOOT_READ_CMDS, MODEL_FOOT,
 )
+from lfeditor.comms.protocol import FOOT_PER_RECORD_CMDS
 from lfeditor.comms import protocol
 from lfeditor.comms.transport import split_sysex
 
@@ -144,7 +145,7 @@ def test_pull_dump_synthesizes_writeable_frames():
     # connect() reads the handshake reply then the CA reply (empty), then the 0x05 stream:
     t = FakeTransport(replies=[b"\xf0\x05\x00\x7c\x06\x20\xf7", b"",
                                _device_block(1, 170, preset_recs)])
-    dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[0x05])
+    dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[0x05], per_record=False)
     assert len(dump.frames) == len(preset_recs)
     f0 = dump.frames[0]
     # the synthesised frame must re-encode byte-identically to the device's real frame
@@ -162,3 +163,58 @@ def test_foot_read_cmd_map_consistent_with_codec():
         recs = d.records(rtype)
         assert recs, f"no type-{rtype} records"
         assert len(recs[0].values) == rlen, f"cmd {cmd:#x}: {len(recs[0].values)} != {rlen}"
+
+
+def test_per_record_read_command_layout():
+    f = protocol.per_record_read_command(0x0B, 5, MODEL_FOOT)
+    assert list(f) == [0xF0, 0x00, 0x00, 0x7C, 0x00, 0x0B, 0x02, 0x00, 0x00, 0x00, 0x05, 0xF7]
+    # 4-nibble record number, big-endian
+    f2 = protocol.per_record_read_command(0x0D, 253, MODEL_FOOT)
+    assert list(f2)[7:11] == [0x00, 0x00, 0x0F, 0x0D]
+
+
+def test_pull_records_per_record_parses_device_frame_as_is():
+    """A per-record reply IS a genuine .syx frame — no header synthesis, unlike pull_records.
+
+    Recnum is 0-based and matches the on-disk record number exactly (confirmed on hardware
+    2026-07-15: requesting recnum=1 returned the on-disk rec_num=1 record, byte-identical)."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    t = FakeTransport(replies=[song0.to_bytes()])
+    got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0B])
+    assert len(got) == 1
+    assert got[0].type == 2 and got[0].rec_num == 0
+    assert got[0].values == song0.values
+    assert got[0].to_bytes() == song0.to_bytes()
+    # requested recnum 0, 1, 2, ... in order
+    assert t.sent[0] == protocol.per_record_read_command(0x0B, 0, MODEL_FOOT)
+    assert t.sent[1] == protocol.per_record_read_command(0x0B, 1, MODEL_FOOT)
+
+
+def test_pull_records_per_record_skips_unanswered_and_unparseable():
+    # first reply is garbage (too short to be a frame), second is empty (no reply) -> both skipped
+    t = FakeTransport(replies=[b"\xf0\x00\xf7", b""])
+    got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0D])
+    assert got == []
+
+
+def test_foot_per_record_cmds_consistent_with_factory_dump():
+    """Every per-record type's count matches the shipped factory dump (public fixture)."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    counts = factory.counts()
+    from lfeditor.codec.frame import TYPE_NAMES
+    for cmd, (rtype, count) in FOOT_PER_RECORD_CMDS.items():
+        name = TYPE_NAMES[rtype]
+        assert counts.get(name) == count, f"cmd {cmd:#x} ({name}): expected {count}, got {counts.get(name)}"
+
+
+def test_pull_dump_includes_per_record_types_by_default():
+    """pull_dump(per_record=True) (the default) merges in Song/Setlist/IASwitch frames."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    t = FakeTransport(replies=[
+        b"\xf0\x05\x00\x7c\x06\x20\xf7", b"",   # connect(): handshake + CA
+        song0.to_bytes(),                        # first per-record reply (Song rec 0)
+    ])
+    dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[])  # no bulk types requested
+    assert any(f.type == 2 and f.rec_num == 0 for f in dump.frames)

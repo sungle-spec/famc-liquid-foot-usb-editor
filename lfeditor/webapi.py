@@ -267,6 +267,36 @@ class Session:
         from .comms.protocol import FOOT_READ_CMDS
         return [[x, rt, rl] for x, (rt, rl) in FOOT_READ_CMDS.items()]
 
+    def dev_per_record_cmds(self) -> list:
+        """[[cmd, record_type, count], …] — the 2013-editor-style per-record read path for
+        Song/Setlist/IASwitch (see comms/protocol.py FOOT_PER_RECORD_CMDS): the bulk get-commands
+        above can't reach these, but a request per record, answered on hardware 2026-07-15, can."""
+        from .comms.protocol import FOOT_PER_RECORD_CMDS
+        return [[cmd, rt, count] for cmd, (rt, count) in FOOT_PER_RECORD_CMDS.items()]
+
+    def dev_per_record_command(self, cmd: int, rec_num: int) -> bytes:
+        from .comms.protocol import per_record_read_command
+        return per_record_read_command(cmd, rec_num)
+
+    def dev_ingest_per_record(self, raw) -> bool:
+        """Parse one per-record device reply (a genuine .syx frame, no header synthesis needed)
+        and merge it into the open document — creating one if `dev_load` hasn't run yet.
+        Returns whether `raw` parsed as a valid record frame."""
+        from .codec.frame import Frame
+        try:
+            fr = Frame.parse(bytes(raw))
+        except ValueError:
+            return False
+        if self.dump is None:
+            self.dump = Dump()
+        by_key = {(f.type, f.rec_num): i for i, f in enumerate(self.dump.frames)}
+        key = (fr.type, fr.rec_num)
+        if key in by_key:
+            self.dump.frames[by_key[key]] = fr
+        else:
+            self.dump.frames.append(fr)
+        return True
+
     def dev_load(self, records_by_type) -> dict:
         """Build a Dump from device-read decoded records {record_type: [[values],…]} and make it
         the open document, so the whole editor (and Save) works on what the device returned."""

@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
 
     # --- device session (all device I/O runs on a worker thread) ---
     WRITABLE_TYPES = None  # set lazily from FOOT_READ_CMDS
+    READ_TYPES = None      # set lazily from FOOT_READ_CMDS + FOOT_PER_RECORD_CMDS
 
     def _writable_types(self):
         if self.WRITABLE_TYPES is None:
@@ -294,8 +295,14 @@ class MainWindow(QMainWindow):
             self.WRITABLE_TYPES = {rt for rt, _ in FOOT_READ_CMDS.values()}
         return self.WRITABLE_TYPES
 
-    # On the Foot, the set of types readable over USB equals the set writable over USB.
-    _read_types = _writable_types
+    def _read_types(self):
+        # Song/Setlist/IASwitch are readable over USB (per-record path, confirmed on hardware
+        # 2026-07-15) but NOT yet writable that way — the standard write frame hasn't been
+        # verified against those types, so they stay out of _writable_types until it is.
+        if self.READ_TYPES is None:
+            from ..comms.protocol import FOOT_PER_RECORD_CMDS
+            self.READ_TYPES = self._writable_types() | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()}
+        return self.READ_TYPES
 
     def _send_all(self, frames):
         """Write every frame in `frames` to the device; return (written, failed) frame lists."""
@@ -417,8 +424,9 @@ class MainWindow(QMainWindow):
         def ok(dev):
             if self.dump is None:
                 self.dump = dev
-                note = ("Loaded device records. Note: Song/Set-List/Page/IA-Slot are not exposed "
-                        "over USB — those tabs will be empty until you open a .syx backup.")
+                note = ("Loaded device records, including Songs/Set-Lists/IA-Switches. Note: "
+                        "Page records aren't exposed over USB — that tab will be empty until "
+                        "you open a .syx backup.")
             else:
                 by_key = {(f.type, f.rec_num): f for f in dev.frames}
                 for i, f in enumerate(self.dump.frames):
@@ -426,7 +434,8 @@ class MainWindow(QMainWindow):
                     if repl is not None:
                         self.dump.frames[i] = repl
                 note = (f"Overlaid {len(dev.frames)} device records onto the loaded backup "
-                        f"(types {sorted(read_types)}). Song/Set-List/Page/IA-Slot kept from file.")
+                        f"(types {sorted(read_types)}, incl. Songs/Set-Lists/IA-Switches). "
+                        f"Page records kept from file.")
             for w in self.tab_widgets:
                 w.set_dump(self.dump)
             self._snapshot_baseline()   # device is now the reference for "changed"
@@ -573,9 +582,35 @@ class MainWindow(QMainWindow):
             self._snapshot_baseline()
             QMessageBox.information(self, "From LF+", f"Read {n} {tname} record(s) from the device.")
 
+        from ..codec import Dump
         from ..comms import pull_dump, MODEL_FOOT
-        self._run_device(lambda: pull_dump(self.transport, MODEL_FOOT), ok,
-                         f"reading {tname}…", "From LF+ failed")
+        from ..comms.protocol import (
+            PER_RECORD_CMD_FOR_TYPE, READ_CMD_FOR_TYPE, pull_one_record_per_record,
+            pull_records_per_record,
+        )
+        if type_ in PER_RECORD_CMD_FOR_TYPE:
+            # Song/Setlist/IASwitch: scope the fetch to just this type (and just this record
+            # for a single "From LF+"), not the whole dump — per-record reads are far slower
+            # than the bulk path.
+            if kind == "from":
+                rec_num = [f for f in self.dump.frames if f.type == type_][index].rec_num
+
+                def work():
+                    fr = pull_one_record_per_record(self.transport, type_, rec_num, MODEL_FOOT)
+                    return Dump(frames=[fr] if fr else [])
+            else:
+                cmd = PER_RECORD_CMD_FOR_TYPE[type_]
+
+                def work():
+                    return Dump(frames=pull_records_per_record(self.transport, MODEL_FOOT, cmds=[cmd]))
+        else:
+            cmd = READ_CMD_FOR_TYPE.get(type_)
+            cmds = [cmd] if cmd is not None else None
+
+            def work():
+                return pull_dump(self.transport, MODEL_FOOT, cmds=cmds, per_record=False)
+
+        self._run_device(work, ok, f"reading {tname}…", "From LF+ failed")
 
     # --- file ops ---
     def open_file(self):

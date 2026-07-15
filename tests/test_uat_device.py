@@ -95,7 +95,7 @@ def _win(qapp, transport=None):
 
 
 PRESET_TYPE = 1   # writable + readable over USB
-SONG_TYPE = 2     # NOT exposed over USB
+SONG_TYPE = 2     # readable over USB (per-record path) but NOT writable that way yet
 
 
 def _edit_first_preset_name(w, name="UAT_EDIT"):
@@ -110,10 +110,14 @@ def _edit_first_preset_name(w, name="UAT_EDIT"):
 
 # ---- refactor invariants -------------------------------------------------------------------
 
-def test_read_and_writable_type_sets_are_identical(qapp):
+def test_read_and_writable_type_sets(qapp):
+    """Readable is a strict superset of writable: Song/Setlist/IASwitch transfer over USB via
+    the per-record path (confirmed on hardware 2026-07-15) but aren't write-verified that way
+    yet, so they stay readable-only."""
     w = _win(qapp)
-    assert w._read_types() == w._writable_types()
+    assert w._writable_types() < w._read_types()
     assert PRESET_TYPE in w._writable_types()
+    assert SONG_TYPE in w._read_types()
     assert SONG_TYPE not in w._writable_types()
 
 

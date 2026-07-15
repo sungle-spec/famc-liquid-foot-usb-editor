@@ -15,9 +15,11 @@ from lfeditor.codec import Dump
 from lfeditor.codec.frame import TYPE_NAMES
 from lfeditor.comms.protocol import (
     DEFAULT_MODEL,
+    FOOT_PER_RECORD_CMDS,
     FOOT_READ_CMDS,
     exit_frame,
     handshake_frame,
+    per_record_read_command,
     read_command,
     session_frame,
 )
@@ -125,3 +127,56 @@ def test_dev_write_frame_out_of_range_is_empty():
     s = _loaded_session()
     assert bytes(s.dev_write_frame(1, 9999)) == b""
     assert bytes(s.dev_write_frame(1, -1)) == b""
+
+
+# ---- the per-record path: Song/Setlist/IASwitch, confirmed on hardware 2026-07-15 ----
+
+def test_dev_per_record_cmds_matches_the_confirmed_command_table():
+    got = {int(cmd): (int(rt), int(count)) for cmd, rt, count in Session().dev_per_record_cmds()}
+    assert got == FOOT_PER_RECORD_CMDS
+
+
+def test_dev_per_record_command_matches_protocol():
+    s = Session()
+    for cmd in FOOT_PER_RECORD_CMDS:
+        for rec_num in (0, 1, 253):
+            assert bytes(s.dev_per_record_command(cmd, rec_num)) == per_record_read_command(cmd, rec_num)
+
+
+def test_dev_ingest_per_record_creates_a_document_if_none_open():
+    factory = Dump.from_file(str(FACTORY))
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    s = Session()
+    assert s.dump is None
+    ok = s.dev_ingest_per_record(song0.to_bytes())
+    assert ok is True
+    assert s.dump is not None
+    got = next(f for f in s.dump.frames if f.type == 2 and f.rec_num == 0)
+    assert got.values == song0.values
+
+
+def test_dev_ingest_per_record_merges_into_an_open_document_and_replaces_by_key():
+    s = _loaded_session()
+    factory = Dump.from_file(str(FACTORY))
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    before = len([f for f in s.dump.frames if f.type == 2])
+    assert s.dev_ingest_per_record(song0.to_bytes()) is True
+    after = [f for f in s.dump.frames if f.type == 2]
+    assert len(after) == before  # factory session already has this Song rec_num — replaced, not duplicated
+
+    # a genuinely new (type, rec_num) key appends instead of replacing: patch the on-wire
+    # rec_num nibbles directly to a slot the factory dump doesn't have (Song's 2-nibble field
+    # sits at bytes 7-8, per TYPE_LAYOUT; the factory dump already fills 0..253, so anything
+    # higher is guaranteed new — this is a synthetic probe of the merge logic, not a real device
+    # record number)
+    raw = bytearray(song0.to_bytes())
+    new_num = 254
+    raw[7], raw[8] = (new_num >> 4) & 0xF, new_num & 0xF
+    assert s.dev_ingest_per_record(bytes(raw)) is True
+    assert len([f for f in s.dump.frames if f.type == 2]) == before + 1
+    assert any(f.type == 2 and f.rec_num == new_num for f in s.dump.frames)
+
+
+def test_dev_ingest_per_record_rejects_garbage():
+    s = _loaded_session()
+    assert s.dev_ingest_per_record(b"\xf0\x00\xf7") is False

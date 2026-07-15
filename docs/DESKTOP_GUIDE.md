@@ -221,9 +221,10 @@ must be in the `dialout` group; **macOS** works out of the box.
 
 1. **Connect** — opens the port and puts the unit into *Editor Mode* (its LCD says so; the
    status dot goes green).
-2. **From LF+** — reads every USB-exposed record type and overlays it onto the open document.
-   Songs / Set-Lists / Pages / IA-Slots aren't in the device's USB read set — they stay as
-   loaded from your file; edit those offline.
+2. **From LF+** — reads every USB-exposed record type and overlays it onto the open document,
+   including Songs / Set-Lists / IA-Slots (a slower per-record pass — confirmed on hardware
+   2026-07-15). Page records aren't in the device's USB read set by any known request — they
+   stay as loaded from your file; edit those offline.
 3. **To LF+** — writes **every record you've changed** since the last Open / From LF+, listed
    in a confirmation first. Each write is acknowledged by the device.
 4. **Disconnect** — tells the unit to leave Editor Mode and closes the port cleanly. Avoid

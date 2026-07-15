@@ -111,7 +111,7 @@ function onDeviceRead(name, counts) {
   buildTabStrip();
   selectTab(App.schema.tab_order[0]);
   refreshToolbarState();
-  const summary = ["Preset", "Config", "IAMap", "SysexMsg", "PresetExt9", "PresetExt10", "SongExt11"]
+  const summary = ["Preset", "Song", "Setlist", "IASwitch", "Config", "IAMap", "SysexMsg", "PresetExt9", "PresetExt10", "SongExt11"]
     .filter(k => counts.get ? counts.get(k) : counts[k]).map(k => `${counts.get ? counts.get(k) : counts[k]} ${k}`).join("  ");
   setStatus(`${name} — ${summary}`);
 }
