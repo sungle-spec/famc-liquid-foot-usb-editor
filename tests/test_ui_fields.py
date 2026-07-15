@@ -105,6 +105,23 @@ def test_rocker_toggle_writes_bit(win):
     assert before != after
 
 
+def test_iaslot_step_names_section(win):
+    """The IA-Slot 'Step Names' StringFields bind to value[189:221] (see docs/LF_DATA_MODEL.md)
+    and round-trip an edit losslessly, same as the Preset tab's identical field."""
+    from lfeditor.ui.fields import StringField
+    from lfeditor.model.iaswitch import STEP_NAMES_OFF
+    tab = win.tab_widgets[2]  # IA-Slot
+    tab.rail.list.setCurrentRow(0)
+    step_fields = [f for f in _fields(tab)
+                   if isinstance(f, StringField) and f.start >= STEP_NAMES_OFF]
+    assert len(step_fields) == 4
+    rec = tab._rec
+    f0 = step_fields[0]
+    f0.w.setText("MYSTEP01")
+    f0._write()
+    assert "".join(chr(c) for c in rec.values[STEP_NAMES_OFF:STEP_NAMES_OFF + 8]) == "MYSTEP01"
+
+
 def test_midi_groups_channel_grid(win):
     tab = win.tab_widgets[4]  # Midi/Groups
     # channel 1 name comes from Config #1; editing writes back there

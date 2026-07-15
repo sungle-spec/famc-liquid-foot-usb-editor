@@ -230,6 +230,7 @@ The "IA Map to use for Display" dropdown writes no byte (display only). See the 
 | 28 | **group ID** | 0 not grouped, else exclusive group number |
 | 29–108 | **On Command Programming** | 20 entries × **4 bytes** `[func, b1, b2, b3]` — the SAME table format as the Preset command table (`decode_command`). func=1 MIDI Command: b1 = status (msgtype<<4 \| channel), b2/b3 = data. The editor's "MIDI" column resolves the channel to its Config#1 device name. **Offset corrected 2026-06-16 from 30→29** (was off by one): proven by func-validity across all 180 IA-slots of the reference rig — byte 0 of every entry is a valid function code only when the region starts at 29 (the old 30 read the MIDI *status* byte as the func, showing "Fn 176"). |
 | 109–188 | **BYPASS (OFF) Command Programming** | 20 entries × 4 bytes, same `[func,b1,b2,b3]` layout (corrected 110→109) |
+| 189–220 | **step names** | 4 × 8-char ASCII (`STEP # 1` …), same layout as the Preset record's Step Names (value[44:76]). Found 2026-07-16 in a real user's backup — every slot still held the factory-default text, but the storage is structured, not padding: it sits directly after the command tables (109+20*4=189) and directly before the `remember step`/`force step #1` flags below, which are meaningless without named steps. |
 | 221 | **enabled** | bit0 = slot enabled |
 | 222 | **remember step** | bit0 = remember last step state across power cycle |
 | 225 | **on colour** | colour codes per `COLOR_NAMES` |

@@ -19,6 +19,13 @@ GLOBAL_IA_OFF, GLOBAL_IA_BIT = 27, 0x80  # "Global IA Settings" flag (bit 7 of v
 # Trigger" field (then at 29) landed on the first command's func byte.
 ON_CMDS_OFF = 29
 BYPASS_CMDS_OFF = 109
+# 4 step names x 8 ASCII chars, immediately after the command tables (109+20*4=189). Same layout
+# as Preset's Step Names (model/preset.py STEP_NAMES_OFF/STEP_NAME_LEN); found via a real-device
+# backup where every slot still held the factory default "STEP # 1".."STEP # 4" text — confirmed
+# real by the adjacent REMEMBER_STEP/FORCE_STEP flags, which are meaningless without named steps.
+STEP_NAMES_OFF = 189
+STEP_NAME_LEN = 8
+NUM_STEPS = 4
 ENABLE_OFF, ENABLE_BIT = 221, 0x01           # slot enabled
 REMEMBER_STEP_OFF, REMEMBER_STEP_BIT = 222, 0x01  # remember last step across power cycle
 FORCE_STEP_OFF, FORCE_STEP_BIT = 231, 0x01   # force step #1 on preset change

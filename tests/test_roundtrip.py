@@ -248,6 +248,39 @@ def test_iaswitch_command_alignment():
 
 
 @requires_rjm
+def test_iaswitch_step_names():
+    """value[189:221] holds 4x8-char ASCII step names, right after the command tables and right
+    before the remember-step/force-step flags — factory default 'STEP # 1'..'STEP # 4' on an
+    unmodified rig (see docs/LF_DATA_MODEL.md)."""
+    from lfeditor.model.iaswitch import STEP_NAMES_OFF, STEP_NAME_LEN, NUM_STEPS
+    from lfeditor.text import decode_ascii
+    dump = Dump.from_file(str(ROOT / "reference" / "sysex_dumps" / "RJM.syx"))
+    v = dump.ia_switches[0].values  # 'Sound Sculpture'
+    names = [decode_ascii(v, STEP_NAMES_OFF + i * STEP_NAME_LEN, STEP_NAME_LEN)
+             for i in range(NUM_STEPS)]
+    assert names == ["STEP # 1", "STEP # 2", "STEP # 3", "STEP # 4"]
+
+
+@pytest.mark.skipif(not CORPUS, reason="real-world corpus not present")
+def test_iaswitch_step_names_are_actually_customized_in_the_wild():
+    """The step-name field isn't just factory-default padding: real user backups rename it."""
+    from lfeditor.model.iaswitch import STEP_NAMES_OFF, STEP_NAME_LEN, NUM_STEPS
+    from lfeditor.text import decode_ascii
+    default = [f"STEP # {i + 1}" for i in range(NUM_STEPS)]
+    customized = False
+    for path in CORPUS:
+        for ia in [f for f in Dump.from_file(str(path)).frames if f.type == 3]:
+            names = [decode_ascii(ia.values, STEP_NAMES_OFF + i * STEP_NAME_LEN, STEP_NAME_LEN)
+                     for i in range(NUM_STEPS)]
+            if any(n not in (d, "") for n, d in zip(names, default)):
+                customized = True
+                break
+        if customized:
+            break
+    assert customized
+
+
+@requires_rjm
 def test_preset_command_programming():
     """Preset command entries (4 bytes [func,b1,b2,b3]) decode MOTP 1 on the rig."""
     from lfeditor.model.preset import CMDS_OFF

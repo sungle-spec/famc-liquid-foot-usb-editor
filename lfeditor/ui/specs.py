@@ -54,6 +54,8 @@ from ..model.iaswitch import (
     SYNC_DEVICES, GROUP_IDS, PRESET_LABELS,
     SYNC_EFFECT_OFF, SYNC_EFFECTS, REMEMBER_STEP_OFF, REMEMBER_STEP_BIT,
     FORCE_STEP_OFF, FORCE_STEP_BIT, GLOBAL_IA_OFF, GLOBAL_IA_BIT,
+    STEP_NAMES_OFF as IA_STEP_NAMES_OFF, STEP_NAME_LEN as IA_STEP_NAME_LEN,
+    NUM_STEPS as IA_NUM_STEPS,
 )
 
 PAGE_OPTS = {0: "Use current page", **{n: f"Page {n:02}" for n in range(1, 51)}}
@@ -115,7 +117,10 @@ def _iaslot_tab() -> TabSpec:
                      [CommandTableField(ON_CMDS_OFF, IA_NUM_CMDS, "", CMD_FUNCS)], labeled=False)
     off_cmd = Section("BYPASS (OFF) Command Programming",
                       [CommandTableField(BYPASS_CMDS_OFF, IA_NUM_CMDS, "", CMD_FUNCS)], labeled=False)
-    return TabSpec("IA-Slot", 3, [[settings], [on_cmd], [off_cmd]], raw_from=24)
+    steps = Section("Step Names",
+                    [StringField(IA_STEP_NAMES_OFF + i * IA_STEP_NAME_LEN, IA_STEP_NAME_LEN,
+                                 f"Step {i+1}") for i in range(IA_NUM_STEPS)], labeled=True)
+    return TabSpec("IA-Slot", 3, [[settings, steps], [on_cmd], [off_cmd]], raw_from=24)
 
 
 def _iamap_tab() -> TabSpec:
