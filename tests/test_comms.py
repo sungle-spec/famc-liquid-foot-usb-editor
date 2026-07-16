@@ -156,6 +156,20 @@ def test_pull_dump_synthesizes_writeable_frames():
 
 
 @requires_rjm
+def test_synth_frame_round_trips_page_song_setlist_iaswitch():
+    """_synth_frame's header template must reproduce the device's real .syx frame byte-for-byte
+    for the four new bulk types too, not just Preset (already covered above) — otherwise a
+    bulk-sourced Page/Song/Setlist/IASwitch record couldn't be written back to the device."""
+    raw = (ROOT / "reference" / "sysex_dumps" / "RJM.syx").read_bytes()
+    real_frames = split_frames(raw)
+    for rtype in (7, 2, 5, 3):
+        real = next(fr for fr in real_frames if fr[5] == rtype)
+        parsed = Frame.parse(real)
+        synth = protocol._synth_frame(rtype, parsed.rec_num, parsed.values, MODEL_FOOT)
+        assert synth.to_bytes() == real
+
+
+@requires_rjm
 def test_foot_read_cmd_map_consistent_with_codec():
     """Every read-command's record length matches the codec's decoded value-count."""
     d = Dump.from_file(ROOT / "reference" / "sysex_dumps" / "RJM.syx")
@@ -274,3 +288,63 @@ def test_pull_dump_includes_per_record_types_by_default():
     ])
     dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[])  # no bulk types requested
     assert any(f.type == 2 and f.rec_num == 0 for f in dump.frames)
+
+
+@requires_rjm
+def test_pull_records_segments_page_song_setlist_iaswitch_streams():
+    """The 2026-07-16 bulk commands (0x06 IASwitch, 0x07 Page, 0x08 Song, 0x09 Setlist — see
+    FOOT_READ_CMDS) slice the same way the older bulk types do. 0x07/0x08/0x09 were found by
+    disassembling the original v6.31 editor; 0x06 turned up live during the hardware probe that
+    confirmed the other three (its command byte is computed at runtime in that editor, so it
+    never appeared as a literal in the disassembly)."""
+    d = Dump.from_file(ROOT / "reference" / "sysex_dumps" / "RJM.syx")
+    for cmd, rtype in ((0x06, 3), (0x07, 7), (0x08, 2), (0x09, 5)):
+        recs = d.records(rtype)
+        t = FakeTransport(replies=[_device_block(rtype, len(recs[0].values), recs)])
+        got = pull_records(t, MODEL_FOOT, cmds=[cmd])
+        assert set(got) == {rtype}
+        assert len(got[rtype]) == len(recs)
+        assert got[rtype][0] == recs[0].values
+
+
+def _is_bulk_request(req: bytes, x: int) -> bool:
+    return len(req) == 8 and req[4] == 0x0F and req[5] == 0x0F and req[6] == x
+
+
+def _is_per_record_request(req: bytes, cmd: int) -> bool:
+    return len(req) > 6 and req[5] == cmd and req[6] == 0x02
+
+
+def test_pull_dump_skips_per_record_fallback_for_bulk_satisfied_types():
+    """When bulk 0x08 (Song) answers, pull_dump's per-record fallback must not re-fetch Song via
+    the slower per-record path (0x0B) — only per-record types the bulk phase didn't cover at all
+    (Setlist/IASwitch, since bulk was scoped to Song only here) are attempted as a fallback."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song_recs = factory.records(2)[:3]
+    t = FakeTransport(replies=[
+        b"\xf0\x05\x00\x7c\x06\x20\xf7", b"",     # connect(): handshake + CA
+        _device_block(2, 125, song_recs),          # bulk 0x08 Song stream
+    ])
+    dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[0x08])
+    song_frames = [f for f in dump.frames if f.type == 2]
+    assert len(song_frames) == 3
+    assert song_frames[0].values == song_recs[0].values
+    assert sum(1 for s in t.sent if _is_bulk_request(s, 0x08)) == 1
+    assert not any(_is_per_record_request(s, 0x0B) for s in t.sent)
+
+
+def test_pull_dump_falls_back_to_per_record_when_bulk_song_empty():
+    """If the device doesn't answer the bulk Song request, pull_dump recovers Song via the
+    per-record path instead of silently losing it — the defensive fallback the plan called for,
+    given the 2026-06-15 probe's (apparently mistaken) claim that bulk never reaches Song."""
+    factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
+    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
+    t = FakeTransport(replies=[
+        b"\xf0\x05\x00\x7c\x06\x20\xf7", b"",   # connect(): handshake + CA
+        b"",                                     # bulk 0x08 Song request -> no reply
+        song0.to_bytes(),                        # per-record fallback: Song rec 0 hit
+    ])
+    dump = protocol.pull_dump(t, MODEL_FOOT, cmds=[0x08])
+    song_frames = [f for f in dump.frames if f.type == 2]
+    assert len(song_frames) == 1 and song_frames[0].values == song0.values
+    assert any(_is_per_record_request(s, 0x0B) for s in t.sent)

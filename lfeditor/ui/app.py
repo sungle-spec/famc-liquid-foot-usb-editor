@@ -305,26 +305,45 @@ class MainWindow(QMainWindow):
     READ_TYPES = None      # set lazily from FOOT_READ_CMDS + FOOT_PER_RECORD_CMDS
 
     def _writable_types(self):
+        # Writable == readable: every type we can read over USB (bulk + per-record — see
+        # _read_types) we can also write, by replaying the same .syx record frame the device
+        # itself uses (the 2013 editor's SetSong/SetSetlist/etc. do exactly this — see
+        # docs/LF_USB_DIRECT.md). Per-record types don't get a hardware ACK guarantee the way
+        # the bulk-path write does, so _send_all() additionally reads each one back and compares
+        # bytes before calling it a success.
         if self.WRITABLE_TYPES is None:
-            from ..comms import FOOT_READ_CMDS
-            self.WRITABLE_TYPES = {rt for rt, _ in FOOT_READ_CMDS.values()}
+            self.WRITABLE_TYPES = self._read_types()
         return self.WRITABLE_TYPES
 
     def _read_types(self):
-        # Song/Setlist/IASwitch are readable over USB (per-record path, confirmed on hardware
-        # 2026-07-15) but NOT yet writable that way — the standard write frame hasn't been
-        # verified against those types, so they stay out of _writable_types until it is.
         if self.READ_TYPES is None:
+            from ..comms import FOOT_READ_CMDS
             from ..comms.protocol import FOOT_PER_RECORD_CMDS
-            self.READ_TYPES = self._writable_types() | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()}
+            self.READ_TYPES = ({rt for rt, _ in FOOT_READ_CMDS.values()}
+                               | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()})
         return self.READ_TYPES
 
     def _send_all(self, frames):
-        """Write every frame in `frames` to the device; return (written, failed) frame lists."""
+        """Write every frame in `frames` to the device; return (written, failed) frame lists.
+
+        Per-record types (Song/Setlist/IASwitch — see PER_RECORD_CMD_FOR_TYPE) get an extra
+        readback-and-compare check: their write-frame format was inferred from the decompiled
+        2013 editor (SetToSysex), not independently hardware-confirmed the way the read path
+        was, so the device's F0 09 F7 ACK alone isn't treated as sufficient — a write that ACKs
+        but reads back different bytes (or doesn't read back at all) counts as failed rather than
+        silently reporting success on an unconfirmed write."""
         from ..comms import send_record
+        from ..comms.protocol import MODEL_FOOT, PER_RECORD_CMD_FOR_TYPE, pull_one_record_per_record
         written, failed = [], []
         for f in frames:
-            (written if send_record(self.transport, f, allow_write=True) else failed).append(f)
+            if f.type in PER_RECORD_CMD_FOR_TYPE:
+                def verify(f=f):
+                    back = pull_one_record_per_record(self.transport, f.type, f.rec_num, MODEL_FOOT)
+                    return back is not None and back.to_bytes() == f.to_bytes()
+                ok = send_record(self.transport, f, allow_write=True, verify_read=verify)
+            else:
+                ok = send_record(self.transport, f, allow_write=True)
+            (written if ok else failed).append(f)
         return written, failed
 
     def _commit_baseline(self, frames):
@@ -447,31 +466,28 @@ class MainWindow(QMainWindow):
         """Read the device's records and overlay them onto the loaded dump (or load fresh)."""
         from ..comms import pull_dump, MODEL_FOOT
         from ..comms.protocol import FOOT_PER_RECORD_CMDS
+        from ..codec.frame import TYPE_NAMES
         if self.transport is None:
             return
         read_types = self._read_types()
-        # cumulative offset of each per-record cmd within the combined Song/Setlist/IASwitch
-        # sweep, so progress can report one running "(done/total)" like the web build already
-        # does (web/serial.js Device.pull()) instead of restarting the count per type.
-        per_record_total = sum(count for _rt, count in FOOT_PER_RECORD_CMDS.values())
-        per_record_offset, _acc = {}, 0
-        for _cmd, (_rt, _count) in FOOT_PER_RECORD_CMDS.items():
-            per_record_offset[_cmd] = _acc
-            _acc += _count
 
         def work(emit):
+            # Bulk types (now including Page/Song/Setlist — see FOOT_READ_CMDS) come back in
+            # one shot with no per-record progress needed. The per-record fallback only runs for
+            # whichever types the bulk phase didn't answer (normally just IASwitch, which has no
+            # bulk command at all) — see pull_dump()'s docstring — so progress is reported per
+            # type as it actually happens, not against a fixed 562-request estimate.
             def on_progress(cmd, rec_num, count):
-                done = per_record_offset[cmd] + rec_num + 1
-                if done % 25 == 0 or done == per_record_total:
-                    emit(f"reading device… Songs/Set-Lists/IA-Switches ({done}/{per_record_total})")
+                rtype, _count = FOOT_PER_RECORD_CMDS[cmd]
+                tname = TYPE_NAMES.get(rtype, f"type{rtype}")
+                if (rec_num + 1) % 25 == 0 or rec_num + 1 == count:
+                    emit(f"reading device… {tname} ({rec_num + 1}/{count})")
             return pull_dump(self.transport, MODEL_FOOT, on_progress=on_progress)
 
         def ok(dev):
             if self.dump is None:
                 self.dump = dev
-                note = ("Loaded device records, including Songs/Set-Lists/IA-Switches. Note: "
-                        "Page records aren't exposed over USB — that tab will be empty until "
-                        "you open a .syx backup.")
+                note = "Loaded device records, including Songs/Set-Lists/IA-Switches/Pages."
             else:
                 by_key = {(f.type, f.rec_num): f for f in dev.frames}
                 for i, f in enumerate(self.dump.frames):
@@ -479,8 +495,7 @@ class MainWindow(QMainWindow):
                     if repl is not None:
                         self.dump.frames[i] = repl
                 note = (f"Overlaid {len(dev.frames)} device records onto the loaded backup "
-                        f"(types {sorted(read_types)}, incl. Songs/Set-Lists/IA-Switches). "
-                        f"Page records kept from file.")
+                        f"(types {sorted(read_types)}).")
             for w in self.tab_widgets:
                 w.set_dump(self.dump)
             self._snapshot_baseline()   # device is now the reference for "changed"
@@ -520,7 +535,7 @@ class MainWindow(QMainWindow):
             if failed:
                 names = [f"{TYPE_NAMES.get(f.type, f.type)} #{f.rec_num + 1}" for f in failed]
                 QMessageBox.warning(self, "To LF+", f"Wrote {len(written)} record(s); "
-                                    f"{len(failed)} not acknowledged:\n" + "\n".join(names))
+                                    f"{len(failed)} not confirmed:\n" + "\n".join(names))
             else:
                 QMessageBox.information(self, "To LF+", f"Wrote {len(written)} record(s) "
                                        "— all acknowledged by the device.")
@@ -594,7 +609,7 @@ class MainWindow(QMainWindow):
             self._refresh_conn_label()
             msg = f"Wrote {len(written)} {tname} record(s)."
             if failed:
-                msg += f"  {len(failed)} not acknowledged."
+                msg += f"  {len(failed)} not confirmed."
             QMessageBox.information(self, "To LF+", msg)
 
         self._run_device(lambda: self._send_all(frames), ok,
@@ -632,10 +647,11 @@ class MainWindow(QMainWindow):
             PER_RECORD_CMD_FOR_TYPE, READ_CMD_FOR_TYPE, pull_one_record_per_record,
             pull_records_per_record,
         )
-        if type_ in PER_RECORD_CMD_FOR_TYPE:
-            # Song/Setlist/IASwitch: scope the fetch to just this type (and just this record
-            # for a single "From LF+"), not the whole dump — per-record reads are far slower
-            # than the bulk path.
+        if type_ in PER_RECORD_CMD_FOR_TYPE and type_ not in READ_CMD_FOR_TYPE:
+            # Song/Setlist/IASwitch all have per-record commands, but since each also has a
+            # cheaper bulk equivalent now (0x08/0x09/0x06 — see FOOT_READ_CMDS), this branch is
+            # normally unreachable in practice; it stays as a defensive fallback for a type that
+            # somehow loses its bulk command on a given device/firmware.
             if kind == "from":
                 rec_num = [f for f in self.dump.frames if f.type == type_][index].rec_num
 

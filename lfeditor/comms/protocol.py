@@ -52,10 +52,34 @@ LIVE_DELIM = 0xFE       # the live-position stream is FE-delimited 8-byte frames
 
 # Foot read get-commands, confirmed on hardware. cmd -> (record_type, record_len_bytes).
 # The device streams `count * record_len` decoded bytes + 1 trailing status byte. Record
-# lengths are the codec's decoded value-counts. (0x0E returns a 24000-byte auxiliary IA-sync
-# *display* stream that is not a stored record type, so it is intentionally omitted.)
+# lengths are the codec's decoded value-counts. (0x0E returns the firmware-data stream, not a
+# stored record type — see Get_All_Firmware_Data below — so it is intentionally omitted.)
+#
+# 0x07/0x08/0x09 (Page/Song/Setlist) were found 2026-07-16 by disassembling the original v6.31
+# macOS editor (Xojo, full symbol table): its Window1.Get_All_Pages/Songs/SetLists methods each
+# build exactly this bulk frame with X=0x07/0x08/0x09. The same disassembly's OTHER Get_All_*
+# methods matched our hardware-confirmed cmd bytes exactly (Presets 0x05, Sysex 0x0A, Config
+# 0x0B, IASlotMapping 0x0C, IALabels 0x0D, MAPLabels 0x0F, SongPresetLabels 0x10, and Firmware
+# Data 0x0E), which validates the method for the three new ones. This *contradicts* the
+# 2026-06-15 manual probe that logged no reply for 0x01-0x20 on Song/Setlist/Page — that probe's
+# negative result was apparently a timeout/session-state artifact, not a real device limit.
+# **All three (0x07/0x08/0x09) confirmed on a real LF+ 12+ the same day** via
+# `scripts/probe_bulk_pages.py`: exact expected reply lengths (Page 50*210+1, Song 254*125+1,
+# Setlist 128*90+1 bytes) and bulk Song's first record byte-identical to the already-proven
+# per-record path. 0x06 (IASwitch) was ALSO found live in that same hardware session — not in
+# the disassembly (the original editor computes that command byte at runtime, so it didn't show
+# up as a literal in the binary) but the probe's byte-shape scan turned it up: reply length
+# exactly 180*250+1 bytes, content matching real IA-slot effect names ("Sound Sculpture Fun",
+# "Keeley Compress Comp") and the Step Names field, and byte-identical to per-record IASwitch
+# rec 0. So every per-record type now has a bulk equivalent too — the per-record path
+# (FOOT_PER_RECORD_CMDS below) becomes a pure fallback, kept as a safety net in case a given
+# firmware/model combination doesn't answer one of these four.
 FOOT_READ_CMDS: dict[int, tuple[int, int]] = {
     0x05: (1, 170),    # Preset
+    0x06: (3, 250),    # IASwitch
+    0x07: (7, 210),    # Page
+    0x08: (2, 125),    # Song
+    0x09: (5, 90),     # Setlist
     0x0D: (9, 80),     # PresetExt9
     0x0F: (10, 160),   # PresetExt10
     0x0A: (6, 42),     # SysexMsg
@@ -65,18 +89,16 @@ FOOT_READ_CMDS: dict[int, tuple[int, int]] = {
 }
 # reverse lookup: record type -> its bulk get-command byte
 READ_CMD_FOR_TYPE: dict[int, int] = {rt: cmd for cmd, (rt, _l) in FOOT_READ_CMDS.items()}
-# Page(7) raw records are not exposed over this USB path at all: the 2013 editor's own
-# SendMsg command table (see FOOT_PER_RECORD_CMDS below) has no case for GET_PAGE, so there is
-# no known request that reaches it either. Edit Pages offline.
 
 # 2013-editor-style PER-RECORD read: `F0 00 00 <id> 00 <cmd> 02 <recnum 4 nibbles> F7`, one
 # request per record, one genuine .syx record frame back (parseable directly via Frame.parse —
 # unlike FOOT_READ_CMDS's bulk stream, no header synthesis needed). **Confirmed on hardware
-# 2026-07-15**: this is how Song/Setlist/IASwitch — types the bulk get-commands above can't
-# reach — actually transfer over USB; it's why the original 2013/Xojo editors could read them
-# and this modern bulk-only path couldn't. `recnum` is 0-based, matching the on-disk record
-# number exactly (verified: requesting recnum=1 returns the on-disk rec_num=1 record, byte-
-# identical). cmd -> (record_type, record_count).
+# 2026-07-15**: this is how Song/Setlist/IASwitch transfer over USB — originally the only way to
+# reach them at all, before Song/Setlist/IASwitch each gained a bulk equivalent (0x08/0x09/0x06,
+# found 2026-07-16). This path now stays only as pull_dump()'s automatic fallback for whichever
+# of the three a given device doesn't answer over bulk. `recnum` is 0-based, matching the
+# on-disk record number exactly (verified: requesting recnum=1 returns the on-disk rec_num=1
+# record, byte-identical). cmd -> (record_type, record_count).
 FOOT_PER_RECORD_CMDS: dict[int, tuple[int, int]] = {
     0x0B: (2, 254),   # Song
     0x0D: (5, 128),   # Setlist
@@ -321,13 +343,17 @@ def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
 
     Bulk-path records (FOOT_READ_CMDS) are synthesised from the decoded values using a
     per-type header template so they re-encode to the device's .syx frame format (and can be
-    written back). Per-record types (Song/Setlist/IASwitch, see FOOT_PER_RECORD_CMDS) are
-    fetched one at a time and used as-is — pass `per_record=False` to skip them (e.g. for a
-    quick preset-only pull). `on_progress` is forwarded to `pull_records_per_record` — wire it
-    up so the caller can show live progress during the ~562-request per-record sweep, which is
-    otherwise indistinguishable from a hang (see MAX_CONSECUTIVE_MISSES). The handshake is sent
-    here; callers that already connected can pass an open, post-handshake transport — a second
-    handshake is harmless."""
+    written back). `per_record=True` (default) additionally runs the per-record path
+    (FOOT_PER_RECORD_CMDS) as a FALLBACK, but only for types the bulk phase didn't already
+    return records for — Song/Setlist/IASwitch normally all come back over their bulk commands
+    (0x08/0x09/0x06) and are skipped here, saving up to 562 redundant per-record round trips. If
+    a device/firmware doesn't answer one of those three over bulk, this transparently recovers
+    it per-record instead — pass `per_record=False` to skip the fallback entirely (e.g. for a
+    quick preset-only pull).
+    `on_progress` is forwarded to `pull_records_per_record` — wire it up so the caller can show
+    live progress during the per-record sweep, which is otherwise indistinguishable from a hang
+    (see MAX_CONSECUTIVE_MISSES). The handshake is sent here; callers that already connected can
+    pass an open, post-handshake transport — a second handshake is harmless."""
     connect(transport, model)
     recs = pull_records(transport, model, cmds)
     dump = Dump()
@@ -335,7 +361,10 @@ def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
         for rec_num, values in enumerate(value_lists):
             dump.frames.append(_synth_frame(rtype, rec_num, values, model))
     if per_record:
-        dump.frames.extend(pull_records_per_record(transport, model, on_progress=on_progress))
+        remaining = [cmd for cmd, (rtype, _count) in FOOT_PER_RECORD_CMDS.items()
+                    if not recs.get(rtype)]
+        dump.frames.extend(pull_records_per_record(transport, model, cmds=remaining,
+                                                    on_progress=on_progress))
     return dump
 
 

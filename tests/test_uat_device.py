@@ -10,7 +10,10 @@ user depends on:
 * a successful write re-baselines the record so it isn't re-sent next time;
 * a *failed* (un-ACKed) write does NOT re-baseline — the edit is still pending;
 * per-record / all-of-type / read-back header transfers route to the right frames;
-* non-writable record types (Song/Set-List/Page/IA-Slot) are refused gracefully;
+* every real record type is USB-writable (writable == readable); an unrecognised type is
+  refused gracefully;
+* per-record-type writes (Song/Set-List/IA-Slot) are additionally readback-verified, not just
+  ACK-trusted;
 * nothing is transmitted when there is no device, no dump, or no edits.
 
 These lock in the app.py device-I/O refactor (shared `_send_all` / `_commit_baseline` helpers).
@@ -81,6 +84,24 @@ class FakeTransport:
         pass
 
 
+class FakeVerifyTransport(FakeTransport):
+    """Distinguishes the write-ACK read from the per-record readback-verification read by the
+    request's own shape (byte[6]: 0x01 = write frame, 0x02 = per-record read command — see
+    protocol.py's `_synth_frame`/`per_record_read_command`), so a test can make the two answer
+    differently: `ack` gates the write ACK, `readback` is what a subsequent per-record read
+    returns (None simulates the device not answering, e.g. an unverified write)."""
+
+    def __init__(self, ack=True, readback=None):
+        super().__init__(ack=ack)
+        self.readback = readback
+
+    def read_raw(self, idle_timeout=1.0, overall_timeout=10.0):
+        last = self.sent[-1] if self.sent else b""
+        if len(last) > 6 and last[6] == 0x02:
+            return [self.readback] if self.readback else []
+        return [WRITE_ACK] if self.ack else []
+
+
 def _win(qapp, transport=None):
     """A loaded MainWindow whose device calls run synchronously (no worker thread)."""
     from lfeditor.ui.app import MainWindow
@@ -95,8 +116,9 @@ def _win(qapp, transport=None):
     return w
 
 
-PRESET_TYPE = 1   # writable + readable over USB
-SONG_TYPE = 2     # readable over USB (per-record path) but NOT writable that way yet
+PRESET_TYPE = 1   # writable + readable over USB (bulk path)
+SONG_TYPE = 2      # writable + readable over USB (bulk 0x08, falls back to per-record)
+UNKNOWN_TYPE = 99  # not a real record type — exercises the writable-gate branch itself
 
 
 def _edit_first_preset_name(w, name="UAT_EDIT"):
@@ -112,14 +134,13 @@ def _edit_first_preset_name(w, name="UAT_EDIT"):
 # ---- refactor invariants -------------------------------------------------------------------
 
 def test_read_and_writable_type_sets(qapp):
-    """Readable is a strict superset of writable: Song/Setlist/IASwitch transfer over USB via
-    the per-record path (confirmed on hardware 2026-07-15) but aren't write-verified that way
-    yet, so they stay readable-only."""
+    """Writable == readable: every real record type reads over USB (bulk or per-record — see
+    FOOT_READ_CMDS / FOOT_PER_RECORD_CMDS) and is now also writable by replaying its own .syx
+    record frame, the same way the original editor's SetSong/SetSetlist/etc. do."""
     w = _win(qapp)
-    assert w._writable_types() < w._read_types()
+    assert w._writable_types() == w._read_types()
     assert PRESET_TYPE in w._writable_types()
-    assert SONG_TYPE in w._read_types()
-    assert SONG_TYPE not in w._writable_types()
+    assert SONG_TYPE in w._writable_types()
 
 
 def test_send_all_routes_written_and_failed(qapp):
@@ -130,6 +151,26 @@ def test_send_all_routes_written_and_failed(qapp):
     w.transport.ack = False
     written, failed = w._send_all(frames)
     assert written == [] and failed == frames
+
+
+def test_send_all_readback_verifies_per_record_types(qapp):
+    """Song/Setlist/IASwitch writes aren't just ACK-trusted (their write-frame format was
+    inferred, not hardware-confirmed the way the read path was — see docs/LF_USB_DIRECT.md):
+    a write that ACKs but reads back the wrong (or no) bytes must count as failed."""
+
+    def _win_song():
+        w = _win(qapp)
+        return w, next(fr for fr in w.dump.frames if fr.type == SONG_TYPE)
+
+    w, song = _win_song()
+    w.transport = FakeVerifyTransport(ack=True, readback=song.to_bytes())
+    written, failed = w._send_all([song])
+    assert written == [song] and failed == []
+
+    w, song = _win_song()
+    w.transport = FakeVerifyTransport(ack=True, readback=None)   # ACKed but unverifiable
+    written, failed = w._send_all([song])
+    assert written == [] and failed == [song]
 
 
 def test_commit_baseline_clears_pending(qapp):
@@ -176,7 +217,7 @@ def test_failed_write_stays_pending(qapp, _silence_dialogs):
     w.push_to_device()
     assert f.to_bytes() in t.sent              # we tried
     assert f in w._changed_writable()          # but it's NOT baselined — still pending
-    assert "not acknowledged" in _silence_dialogs.get("warning", "")
+    assert "not confirmed" in _silence_dialogs.get("warning", "")
 
 
 # ---- per-record / per-type header transfers ------------------------------------------------
@@ -198,10 +239,12 @@ def test_transfer_all_to_sends_every_record_of_type(qapp):
     assert set(t.sent) == {fr.to_bytes() for fr in presets}
 
 
-def test_transfer_refuses_non_writable_type(qapp):
+def test_transfer_refuses_unknown_type(qapp):
+    """All 11 real record types are USB-writable now, so this exercises the underlying gating
+    branch in transfer() with a type the protocol doesn't recognise at all."""
     t = FakeTransport(ack=True)
     w = _win(qapp, t)
-    w.transfer("to", SONG_TYPE, 0)        # Song is not USB-writable
+    w.transfer("to", UNKNOWN_TYPE, 0)
     assert t.sent == []
 
 

@@ -28,19 +28,20 @@ WebSerial — the **Connect** button is disabled there.
 
 1. **Connect** — pick the LF+'s serial port; the app handshakes it into Editor Mode (the device LCD
    shows "Editor Mode"). The dot turns green.
-2. **From LF+** — reads every USB-exposed data type (Presets, Config, IA-Maps, Sysex messages, the
-   preset/song label extension records, and Songs/Set-Lists/IA-Switches via a slower per-record
-   pass) into the editor. Non-destructive.
+2. **From LF+** — reads every USB-exposed data type: Presets, Config, IA-Maps, Sysex messages, the
+   preset/song label extension records, and Pages/Songs/Setlists/IA-Switches (all bulk since
+   0x06/0x07/0x08/0x09, found and hardware-confirmed 2026-07-16 — see
+   [LF_USB_DIRECT.md](LF_USB_DIRECT.md)), with a per-record fallback for any of Song/Setlist/
+   IA-Switch a given device doesn't answer over bulk. Non-destructive.
 3. **To LF+** — writes the *current* record back (gated behind a confirm). Keep a backup;
    there is no undo. The device ACKs each write (`F0 09 F7`).
 4. **Disconnect** — leaves Editor Mode and closes the port.
 
 ## Limits
 
-- **Songs / Set-Lists / IA-Switches transfer over USB via a per-record request** (confirmed on
-  hardware 2026-07-15) — read-only for now; the write path for these types hasn't been verified.
-  **Page records are not exposed over USB by any known request** — edit those offline and save a
-  `.syx`.
+- **Pages/Songs/Setlists/IA-Switches all transfer over USB now**, all via bulk commands
+  (0x06/0x07/0x08/0x09, hardware-confirmed 2026-07-16 — see
+  [LF_USB_DIRECT.md](LF_USB_DIRECT.md)), and every type is writable.
 - No live expression-pedal calibration view yet (the desktop has it; it's a streaming `D2` mode).
 - **Always keep a `.syx` backup before writing** — writes have no undo.
 - The **Connect** click must be a real user click: Chrome only shows the serial-port picker for a
@@ -81,8 +82,9 @@ Keep the procedure below as the regression check for future browser/OS changes. 
 ### 2. Pull (non-destructive)
 
 1. **From LF+**. Expected: progress messages, then counts for Presets(384) / PresetExt9 /
-   PresetExt10 / SysexMsg / Config(2) / IAMap — and the read-complete note that Songs/Set-Lists/
-   Pages/IA-Switches aren't in the USB read set.
+   PresetExt10 / SysexMsg / Config(2) / IAMap (this is the historical 2026-07-13 result, from
+   before Page/Song/Setlist/IASwitch were reachable at all — a current run should also return
+   Page(50) / Song(254) / Setlist(128) / IASwitch(180); see "Limits" above).
 2. **Save** the result as `device_web.syx`.
 3. Compare against the desktop baseline — decoded values must match for every exposed type:
 

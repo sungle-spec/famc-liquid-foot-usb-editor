@@ -5,8 +5,11 @@
 > (a full 384-preset reference rig). This is the source of truth for `lfeditor/comms/`.
 > The same protocol also works from the **browser** (WebSerial, Chrome/Edge): verified on the
 > same hardware 2026-07-13 — see [WEBSERIAL.md](WEBSERIAL.md). Song/Setlist/IASwitch also
-> transfer over USB via a separate per-record request, confirmed 2026-07-15 (below) — read-only
-> for now.
+> transfer over USB via a per-record request, confirmed 2026-07-15 (below), and as of 2026-07-16
+> **every one of Page/Song/Setlist/IASwitch has a hardware-confirmed bulk read command too**
+> (0x06/0x07/0x08/0x09 — see below), with the per-record path kept as an automatic fallback.
+> Every record type is now writable as well as readable, including per-record types, which get
+> an extra readback-and-compare check the bulk path doesn't need (below).
 
 The Foot reuses the **exact** USB-serial protocol first cracked for the sibling FAMC Liquid
 Router (a separate, private reverse-engineering project); only the **MODEL byte changes**
@@ -62,7 +65,16 @@ codes are **not** the record-type codes (just like the Router: read `0x05` ↔ w
 | `0x0B` | Config (4) | 250 | 2 | 501 | ✅ runtime only |
 | `0x0C` | IAMap (8) | 100 | 60 | 6001 | ✅ 4 runtime diffs |
 | `0x10` | SongExt11 (11) | 96 | 254 | 24385 | ✅ 0 diffs |
-| `0x0E` | — aux IA-sync *display* stream ("D:0 Effect:000 …") | — | — | 24001 | not a stored record type |
+| `0x0E` | Firmware data stream (not a stored record type) | — | — | 24001 | see note below |
+| `0x06` | IASwitch (3) | 250 | 180 | 45001 | ✅ found + verified 2026-07-16, see below |
+| `0x07` | Page (7) | 210 | 50 | 10501 | ✅ found + verified 2026-07-16, see below |
+| `0x08` | Song (2) | 125 | 254 | 31751 | ✅ found + verified 2026-07-16, see below |
+| `0x09` | Setlist (5) | 90 | 128 | 11521 | ✅ found + verified 2026-07-16, see below |
+
+`0x0E`'s stream was originally logged as an "aux IA-sync *display* stream" from its shape; the
+v6.31 disassembly (below) resolves it as `Get_All_Firmware_Data` — a firmware-data read, still
+not a stored user record type either way, so it's still intentionally excluded from
+`FOOT_READ_CMDS`.
 
 ### Live expression-pedal stream (`D2`) — reverse-engineered 2026-06-16/17
 
@@ -95,10 +107,16 @@ still running** (no `CC`, no `CA`):
 > bug. (A session that didn't save calibration disconnects cleanly.) The dialog therefore writes
 > during the live stream and resumes it; it only sends `CC`/`CA` on close.
 
-**Not exposed over the *bulk* get-commands above:** Song (2), Setlist (5), Page (7) and IASwitch
-(3) never returned from any bulk get-command (`01`–`20`, `C9`–`CF` all probed) — the device's
-bulk editor-mode read set is a subset, the same situation the Router had (it exposed only
-presets / loop-defs / global over USB that way).
+**2026-06-15 finding, since corrected 2026-07-16 (see below):** at the time, Song (2), Setlist
+(5), Page (7) and IASwitch (3) never returned from any bulk get-command in a manual probe
+(`01`–`20`, `C9`–`CF`) — the device's bulk editor-mode read set looked like a subset, the same
+situation the Router had (it exposed only presets / loop-defs / global over USB that way). This
+led to the per-record fallback below for Song/Setlist/IASwitch, and Page being treated as
+unreachable by any known request. A JR+ tester's 2026-07-16 report that the *original* editor
+reads Pages and writes Songs over USB prompted a second look — see "Bulk Page/Song/Setlist"
+below, which found the earlier probe's negative result was apparently a false negative (timeout
+or session-state artifact), not a real device limit. IASwitch (3) turned out to have a bulk
+command too (0x06) — found live on hardware, not in the disassembly (see below).
 
 ### Per-record read — Song/Setlist/IASwitch, confirmed on hardware 2026-07-15
 
@@ -116,8 +134,10 @@ This is why the original editor could transfer Songs/Set-Lists over USB and the 
 couldn't — see `lfeditor/comms/protocol.py`'s `FOOT_PER_RECORD_CMDS` / `pull_records_per_record`
 / `pull_one_record_per_record`, wired into the desktop app and the web WebSerial bridge
 (`lfeditor/webapi.py`'s `dev_per_record_cmds`/`dev_per_record_command`/`dev_ingest_per_record`,
-`web/serial.js`'s `Device.pull()`). Because it's ~562 individual round trips (254+128+180
-records), it's noticeably slower than the bulk path — expect it to dominate a full "From LF+".
+`web/serial.js`'s `Device.pull()`). Song/Setlist/IASwitch each later gained a bulk command too
+(0x08/0x09/0x06 — see "Bulk Page/Song/Setlist/IASwitch" below), so as of 2026-07-16 this
+~562-round-trip path (254+128+180 records) is a **fallback**, only exercised for whichever of
+the three a device doesn't answer over bulk — `pull_dump()` picks per type automatically.
 
 **Read timing, fixed 2026-07-16.** A forum report of "From LF+" hanging on "reading device…"
 traced to two issues, both now fixed: (1) each reply is a single bounded frame (device goes
@@ -134,13 +154,54 @@ consecutive-miss bail-out (`MAX_CONSECUTIVE_MISSES = 30` in protocol.py, mirrore
 plus live "(done/total)" progress on both desktop and web, so a genuinely slow/failing pull is
 now visible and bounded instead of indistinguishable from a hang.
 
-**Still not exposed over USB by any known request:** Page (7) — the 2013 editor's own `SendMsg`
-command table has no case for `GET_PAGE` at all, so there's no known per-record command either.
-Edit Pages offline in the `.syx`, or capture the real editor's full read sequence (DYLD
-interposer) to look for one.
+### Bulk Page/Song/Setlist/IASwitch (0x06/0x07/0x08/0x09) — found + hardware-verified 2026-07-16
 
-**Write path for these types is NOT yet verified** — only the read direction has been tested on
-hardware. They stay read-only over USB (not in `_writable_types()`) until a write is confirmed.
+A JR+ tester reported that v0.0.7 refused to write Songs and never pulled Pages, while the
+*original* v6.31 macOS editor does both routinely. Disassembling that original editor (installed
+locally, Xojo compiler, full symbol table intact) found `Window1.Get_All_Pages`,
+`Window1.Get_All_Songs`, and `Window1.Get_All_SetLists` — each builds exactly the bulk frame
+`F0 00 00 7C 0F 0F <X> F7` with **X = 0x07 (Page), 0x08 (Song), 0x09 (Setlist)**. This is
+trustworthy because the *same* disassembly's other `Get_All_*` methods reproduced every one of
+our already-hardware-confirmed bulk cmd bytes exactly (Preset 0x05, Sysex 0x0A, Config 0x0B,
+IASlotMapping 0x0C, IALabels 0x0D, MAPLabels 0x0F, SongPresetLabels(SongExt11) 0x10) plus
+resolved 0x0E as `Get_All_Firmware_Data` — nothing in the method contradicted known behavior, so
+there was no reason to doubt the three new ones (`Window1.Get_All_IASlots`' own command byte is
+computed at runtime in that binary, so it didn't show up in the disassembly at all).
+
+Two real backups from the tester (his most recent pull with the original editor, and a pull with
+our own per-record-based v0.0.7) were compared offline: every shared record type — including
+Setlists and IASwitches, both already per-record-only in our editor — matched byte-for-byte, and
+the tester's JR+ reported the identical 384/254/128/180 record ceilings this codebase already
+assumes. So the model differences (JR+ vs 12+ vs Mini vs Pro+) are **not** the cause of either
+bug; both were this editor's own conservative gating. `_synth_frame`'s header template (already
+used for the other bulk types) was verified to round-trip Page/Song/Setlist byte-identically
+against both real backups (0 mismatches across 432 and 382 records respectively) using each
+record's on-disk `(rec_num, values)` — the missing piece was purely the read/write commands.
+
+**Confirmed on a real LF+ 12+ the same day**, via `scripts/probe_bulk_pages.py`
+(read-only): 0x07/0x08/0x09 all answered with exactly the expected reply length (Page
+50×210+1=10501 bytes, Song 254×125+1=31751, Setlist 128×90+1=11521), and a cross-check of bulk
+Song's first record against the already-proven per-record path (0x0B, rec 0) was byte-identical.
+The probe's exploratory scan of neighboring unmapped bytes (looking for a 4th undiscovered bulk
+type) turned up a bonus: **0x06 also answers, with IASwitch (3) data** — 180×250+1=45001 bytes,
+content matching real IA-slot effect names ("Sound Sculpture Fun", "Keeley Compress Comp") and
+the Step Names field, byte-identical to per-record IASwitch rec 0. So all four previously
+per-record-only types (Page/Song/Setlist/IASwitch) now have a confirmed bulk equivalent, and
+`FOOT_READ_CMDS` includes all four (`0x06`/`0x07`/`0x08`/`0x09`).
+
+**Writes.** The decompiled 2013 editor's `SetSong`/`Song.SetToSysex` (and the Preset/Setlist/
+IASwitch/Page equivalents) write a record by sending its own `.syx` dump frame — exactly what
+`send_record()` already does for Preset. So every type's write path is now enabled
+(`_writable_types()` == `_read_types()`), with one addition: per-record types (Song/Setlist/
+IASwitch) don't get the same degree of independent hardware confirmation the bulk-path write
+does, since their write-frame format was inferred rather than captured from a live original-
+editor write session — so `_send_all()` reads each per-record write back afterward and compares
+bytes before calling it a success, rather than trusting the device's `F0 09 F7` ACK alone.
+
+Both `pull_dump()` and `Device.pull()` (web) still keep the per-record fallback for defense in
+depth: they automatically fall back to the per-record path for any of Song/Setlist/IASwitch the
+bulk phase doesn't answer on a given device/firmware, so this degrades gracefully rather than
+losing data even outside the one 12+ unit this was verified against.
 
 ### Channel MIDI on the UART — confirmed 2026-07-15 (the "USB MIDI" recovery)
 

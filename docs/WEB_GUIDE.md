@@ -272,17 +272,17 @@ is ever hidden — and it updates as you edit.
 
 1. **Connect** — pick the LF+'s serial port in the browser prompt. The dot turns green and the
    device LCD shows *Editor Mode*.
-2. **From LF+** — reads every USB-exposed record type (Presets, Config, IA-Maps, Sysex, label
-   records, and Songs/Set-Lists/IA-Switches via a slower per-record pass) into the editor.
-   Non-destructive.
+2. **From LF+** — reads every USB-exposed record type: Presets, Config, IA-Maps, Sysex, label
+   records, and Pages/Songs/Setlists/IA-Switches (all bulk commands, hardware-confirmed
+   2026-07-16), with a slower per-record pass as an automatic fallback for any of Song/Setlist/
+   IA-Switch a device doesn't answer over bulk. Non-destructive.
 3. **To LF+** — writes the current record back, behind an explicit confirmation. The device
-   acknowledges each write.
+   acknowledges each write; per-record types are additionally read back and compared.
 4. **Disconnect** (Connect again) leaves Editor Mode cleanly.
 
-Songs, Set-Lists and IA-Slots transfer over USB via a slower per-record request (same on
-desktop, confirmed on hardware 2026-07-15) — read-only for now. Pages are **not in the device's
-USB read set by any known request** — edit those offline and load the saved `.syx` via the
-original transfer path. Details — and the
+Songs, Set-Lists and IA-Slots can transfer over USB via a slower per-record request as a fallback
+(same on desktop, confirmed on hardware 2026-07-15); Songs/Set-Lists/Pages/IA-Slots normally use
+the faster bulk commands instead. Every type is writable. Details — and the
 **step-by-step first-hardware smoke test** to run when you first try this with a real LF+ —
 in [WEBSERIAL.md](WEBSERIAL.md).
 

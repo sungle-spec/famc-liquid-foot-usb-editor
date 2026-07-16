@@ -122,42 +122,46 @@ const Device = {
       const n = Math.floor(data.length / rlen);
       const lists = [];
       for (let i = 0; i < n; i++) lists.push(Array.from(data.slice(i * rlen, (i + 1) * rlen)));
-      recordsByType[rtype] = lists;
+      if (lists.length) recordsByType[rtype] = lists;
     }
     const pyObj = App.pyodide.toPy(recordsByType);
     const counts = App.session.dev_load(pyObj); pyObj.destroy();
     counts.destroy();
 
-    // Songs/Set-Lists/IA-Switches: the 2013-editor-style PER-RECORD path (one request per
-    // record, one genuine .syx frame back — confirmed on hardware 2026-07-15). Each reply is a
-    // single bounded frame, so drainOneFrame returns the instant it sees the F7 terminator —
-    // no idle wait (see WebSerialLink.drainOneFrame; this is ~562 requests end to end, and the
-    // old drain(300, …) idle tax alone cost ~2.8 min versus the original editor, found
-    // 2026-07-16 chasing a "hangs on reading device" report). MAX_CONSECUTIVE_MISSES mirrors
-    // lfeditor/comms/protocol.py: a device that has stopped answering ENTIRELY for a type
-    // (wrong firmware, wedged link) must not burn the full 3s timeout on every remaining slot.
-    // A real hit resets the streak, so sparse-but-populated data (not every slot need be used)
-    // isn't cut short by scattered gaps.
+    // Song/Setlist/IASwitch: the 2013-editor-style PER-RECORD path (one request per record, one
+    // genuine .syx frame back — confirmed on hardware 2026-07-15). Song and Setlist normally
+    // come back over their bulk commands above (0x08/0x09, found 2026-07-16 disassembling the
+    // original v6.31 editor — see lfeditor/comms/protocol.py FOOT_READ_CMDS), so this loop is a
+    // FALLBACK: it skips any per-record type `recordsByType` already has (mirrors pull_dump()'s
+    // Python fallback logic) and only runs for the rest — normally just IASwitch, which has no
+    // bulk command at all. Each per-record reply is a single bounded frame, so drainOneFrame
+    // returns the instant it sees the F7 terminator — no idle wait (see
+    // WebSerialLink.drainOneFrame; found 2026-07-16 chasing a "hangs on reading device" report).
+    // MAX_CONSECUTIVE_MISSES mirrors lfeditor/comms/protocol.py: a device that has stopped
+    // answering ENTIRELY for a type (wrong firmware, wedged link) must not burn the full 3s
+    // timeout on every remaining slot. A real hit resets the streak, so sparse-but-populated
+    // data (not every slot need be used) isn't cut short by scattered gaps.
     const MAX_CONSECUTIVE_MISSES = 30;
-    const perRecordCmds = App.session.dev_per_record_cmds().toJs(); // [[cmd, rtype, count], …]
-    let done = 0;
-    const total = perRecordCmds.reduce((n, [, , count]) => n + count, 0);
-    for (const [cmd, , count] of perRecordCmds) {
+    const PER_RECORD_TYPE_NAMES = { 2: "Song", 3: "IASwitch", 5: "Setlist" };
+    const perRecordCmds = App.session.dev_per_record_cmds().toJs()   // [[cmd, rtype, count], …]
+      .filter(([, rtype]) => !recordsByType[rtype]);
+    for (const [cmd, rtype, count] of perRecordCmds) {
+      const tname = PER_RECORD_TYPE_NAMES[rtype] || `type${rtype}`;
       let misses = 0;
       for (let recNum = 0; recNum < count; recNum++) {
         await this.link.write(u8(App.session.dev_per_record_command(cmd, recNum)));
         const data = await this.link.drainOneFrame(3000);
         if (data.length) { App.session.dev_ingest_per_record(data); misses = 0; }
-        else if (++misses >= MAX_CONSECUTIVE_MISSES) { done += count - recNum; break; }
-        done++;
-        if (done % 25 === 0 || done === total) deviceMsg(`Reading Songs/Set-Lists/IA-Switches… (${done}/${total})`);
+        else if (++misses >= MAX_CONSECUTIVE_MISSES) break;
+        if ((recNum + 1) % 25 === 0 || recNum + 1 === count) {
+          deviceMsg(`Reading ${tname}… (${recNum + 1}/${count})`);
+        }
       }
     }
-    if (done === total) deviceMsg(`Reading Songs/Set-Lists/IA-Switches… (${done}/${total})`);
 
     const finalCounts = App.pyodide.runPython("session.counts()").toJs();
     onDeviceRead("LF+ device read", finalCounts);
-    deviceMsg("Read complete. (Page records aren't exposed over USB — edit those offline.)");
+    deviceMsg("Read complete.");
   },
 
   async writeCurrent(type_, idx) {
