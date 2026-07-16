@@ -15,6 +15,12 @@ editor and connect your LF+ in minutes.
 > ([famc-liquid-router-usb-editor](https://github.com/sungle-spec/famc-liquid-router-usb-editor))
 > first cracked the FAMC USB-serial protocol; this project reuses that comms work for the
 > Liquid Foot+.
+>
+> **Companion project:** [famc-liquid-foot-legacy-editor](https://github.com/sungle-spec/famc-liquid-foot-legacy-editor)
+> is the sibling editor for the older, pre-USB **Liquid Foot Pro and Junior** line
+> (2009–2013, MIDI/DIN only). Its sysex protocol turned out to be the direct ancestor of this
+> project's wire format, and it reuses this project's codec architecture, MIDI transport, and
+> UI theme.
 
 ## Status
 
