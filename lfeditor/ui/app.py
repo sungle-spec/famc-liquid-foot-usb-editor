@@ -221,12 +221,16 @@ class MainWindow(QMainWindow):
         self._midi_bridge.raise_()
         self._midi_bridge.activateWindow()
 
+    def _rebind_tabs(self):
+        """Re-bind every tab to the current dump (after records were replaced or bulk-edited)."""
+        for w in self.tab_widgets:
+            w.set_dump(self.dump)
+
     def _refresh_after_bulk_edit(self):
         """Re-bind every tab after a bulk edit (quick-prog / re-order) changed many records."""
         if self.dump is None:
             return
-        for w in self.tab_widgets:
-            w.set_dump(self.dump)
+        self._rebind_tabs()
         self.mark_dirty()
 
     def open_quick_prog(self):
@@ -301,9 +305,6 @@ class MainWindow(QMainWindow):
         tb.addAction(self.act_to)
 
     # --- device session (all device I/O runs on a worker thread) ---
-    WRITABLE_TYPES = None  # set lazily from FOOT_READ_CMDS
-    READ_TYPES = None      # set lazily from FOOT_READ_CMDS + FOOT_PER_RECORD_CMDS
-
     def _writable_types(self):
         # Writable == readable: every type we can read over USB (bulk + per-record — see
         # _read_types) we can also write, by replaying the same .syx record frame the device
@@ -311,17 +312,13 @@ class MainWindow(QMainWindow):
         # docs/LF_USB_DIRECT.md). Per-record types don't get a hardware ACK guarantee the way
         # the bulk-path write does, so _send_all() additionally reads each one back and compares
         # bytes before calling it a success.
-        if self.WRITABLE_TYPES is None:
-            self.WRITABLE_TYPES = self._read_types()
-        return self.WRITABLE_TYPES
+        return self._read_types()
 
     def _read_types(self):
-        if self.READ_TYPES is None:
-            from ..comms import FOOT_READ_CMDS
-            from ..comms.protocol import FOOT_PER_RECORD_CMDS
-            self.READ_TYPES = ({rt for rt, _ in FOOT_READ_CMDS.values()}
-                               | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()})
-        return self.READ_TYPES
+        from ..comms import FOOT_READ_CMDS
+        from ..comms.protocol import FOOT_PER_RECORD_CMDS
+        return ({rt for rt, _ in FOOT_READ_CMDS.values()}
+                | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()})
 
     def _send_all(self, frames):
         """Write every frame in `frames` to the device; return (written, failed) frame lists.
@@ -350,6 +347,20 @@ class MainWindow(QMainWindow):
         """Mark `frames` as the new 'unchanged' reference after a successful device write."""
         for f in frames:
             self._baseline[(f.type, f.rec_num)] = f.to_bytes()
+
+    def _finish_write(self, result, noun: str = "record(s)"):
+        """Common tail of every device write: re-baseline what landed, report what didn't."""
+        from ..codec.frame import TYPE_NAMES
+        written, failed = result
+        self._commit_baseline(written)   # written records are the new baseline
+        self._refresh_conn_label()
+        if failed:
+            names = [f"{TYPE_NAMES.get(f.type, f.type)} #{f.rec_num + 1}" for f in failed]
+            QMessageBox.warning(self, "To LF+", f"Wrote {len(written)} {noun}; "
+                                f"{len(failed)} not confirmed:\n" + "\n".join(names))
+        else:
+            QMessageBox.information(self, "To LF+", f"Wrote {len(written)} {noun} "
+                                    "— all acknowledged by the device.")
 
     def _set_conn(self, text: str, color: str):
         """Single source of truth for the status-bar connection LED + label."""
@@ -496,8 +507,7 @@ class MainWindow(QMainWindow):
                         self.dump.frames[i] = repl
                 note = (f"Overlaid {len(dev.frames)} device records onto the loaded backup "
                         f"(types {sorted(read_types)}).")
-            for w in self.tab_widgets:
-                w.set_dump(self.dump)
+            self._rebind_tabs()
             self._snapshot_baseline()   # device is now the reference for "changed"
             self._dirty = False
             self._update_title()
@@ -527,20 +537,7 @@ class MainWindow(QMainWindow):
             return
 
         frames = list(changed)
-
-        def ok(result):
-            written, failed = result
-            self._commit_baseline(written)   # written records are the new baseline
-            self._refresh_conn_label()
-            if failed:
-                names = [f"{TYPE_NAMES.get(f.type, f.type)} #{f.rec_num + 1}" for f in failed]
-                QMessageBox.warning(self, "To LF+", f"Wrote {len(written)} record(s); "
-                                    f"{len(failed)} not confirmed:\n" + "\n".join(names))
-            else:
-                QMessageBox.information(self, "To LF+", f"Wrote {len(written)} record(s) "
-                                       "— all acknowledged by the device.")
-
-        self._run_device(lambda: self._send_all(frames), ok,
+        self._run_device(lambda: self._send_all(frames), self._finish_write,
                          f"writing {len(frames)} record(s)…", "To LF+ failed")
 
     def open_live_calibration(self):
@@ -603,76 +600,66 @@ class MainWindow(QMainWindow):
         ) != QMessageBox.Yes:
             return
 
-        def ok(result):
-            written, failed = result
-            self._commit_baseline(written)
-            self._refresh_conn_label()
-            msg = f"Wrote {len(written)} {tname} record(s)."
-            if failed:
-                msg += f"  {len(failed)} not confirmed."
-            QMessageBox.information(self, "To LF+", msg)
-
-        self._run_device(lambda: self._send_all(frames), ok,
+        self._run_device(lambda: self._send_all(frames),
+                         lambda result: self._finish_write(result, f"{tname} record(s)"),
                          f"writing {len(frames)} {tname}…", "To LF+ failed")
 
     def _read_back(self, type_: int, index: int, kind: str):
-        read_types = self._read_types()
-        from ..codec.frame import TYPE_NAMES
-        tname = TYPE_NAMES.get(type_, f"type{type_}")
-        if type_ not in read_types:
-            QMessageBox.information(self, "From LF+",
-                                   f"{tname} records aren't exposed over USB; edit them offline.")
-            return
-
-        def ok(dev):
-            by_key = {(f.type, f.rec_num): f for f in dev.frames if f.type == type_}
-            n = 0
-            for i, f in enumerate(self.dump.frames):
-                if f.type != type_:
-                    continue
-                if kind == "from" and [fr for fr in self.dump.frames if fr.type == type_].index(f) != index:
-                    continue
-                repl = by_key.get((f.type, f.rec_num))
-                if repl is not None:
-                    self.dump.frames[i] = repl
-                    n += 1
-            for w in self.tab_widgets:
-                w.set_dump(self.dump)
-            self._snapshot_baseline()
-            QMessageBox.information(self, "From LF+", f"Read {n} {tname} record(s) from the device.")
-
+        """Pull `type_` from the device and overlay it ('from' = just the index-th record,
+        'all_from' = every record of the type). Reads over the bulk get-command; if the device
+        doesn't answer bulk for a Song/Setlist/IASwitch (firmware variance — every current
+        device answers all four, see FOOT_READ_CMDS), recovers over the per-record path, the
+        same fallback pull_dump() applies on a full read, scoped to what was asked for."""
         from ..codec import Dump
+        from ..codec.frame import TYPE_NAMES
         from ..comms import pull_dump, MODEL_FOOT
         from ..comms.protocol import (
             PER_RECORD_CMD_FOR_TYPE, READ_CMD_FOR_TYPE, pull_one_record_per_record,
             pull_records_per_record,
         )
-        if type_ in PER_RECORD_CMD_FOR_TYPE and type_ not in READ_CMD_FOR_TYPE:
-            # Song/Setlist/IASwitch all have per-record commands, but since each also has a
-            # cheaper bulk equivalent now (0x08/0x09/0x06 — see FOOT_READ_CMDS), this branch is
-            # normally unreachable in practice; it stays as a defensive fallback for a type that
-            # somehow loses its bulk command on a given device/firmware.
+        tname = TYPE_NAMES.get(type_, f"type{type_}")
+        if type_ not in self._read_types():
+            QMessageBox.information(self, "From LF+",
+                                   f"{tname} records aren't exposed over USB; edit them offline.")
+            return
+        typed = [f for f in self.dump.frames if f.type == type_]
+        want_rec_num = typed[index].rec_num if kind == "from" and index < len(typed) else None
+        cmd = READ_CMD_FOR_TYPE.get(type_)
+
+        def work(emit):
+            dev = pull_dump(self.transport, MODEL_FOOT,
+                            cmds=[cmd] if cmd is not None else None, per_record=False)
+            if dev.frames or type_ not in PER_RECORD_CMD_FOR_TYPE:
+                return dev
             if kind == "from":
-                rec_num = [f for f in self.dump.frames if f.type == type_][index].rec_num
+                fr = (pull_one_record_per_record(self.transport, type_, want_rec_num, MODEL_FOOT)
+                      if want_rec_num is not None else None)
+                return Dump(frames=[fr] if fr else [])
 
-                def work(_emit):
-                    fr = pull_one_record_per_record(self.transport, type_, rec_num, MODEL_FOOT)
-                    return Dump(frames=[fr] if fr else [])
-            else:
-                cmd = PER_RECORD_CMD_FOR_TYPE[type_]
+            def on_progress(_cmd, rec_num, count):
+                if (rec_num + 1) % 25 == 0 or rec_num + 1 == count:
+                    emit(f"reading {tname}… ({rec_num + 1}/{count})")
+            return Dump(frames=pull_records_per_record(
+                self.transport, MODEL_FOOT, cmds=[PER_RECORD_CMD_FOR_TYPE[type_]],
+                on_progress=on_progress))
 
-                def work(emit):
-                    def on_progress(_cmd, rec_num, count):
-                        if (rec_num + 1) % 25 == 0 or rec_num + 1 == count:
-                            emit(f"reading {tname}… ({rec_num + 1}/{count})")
-                    return Dump(frames=pull_records_per_record(
-                        self.transport, MODEL_FOOT, cmds=[cmd], on_progress=on_progress))
-        else:
-            cmd = READ_CMD_FOR_TYPE.get(type_)
-            cmds = [cmd] if cmd is not None else None
-
-            def work(_emit):
-                return pull_dump(self.transport, MODEL_FOOT, cmds=cmds, per_record=False)
+        def ok(dev):
+            by_key = {(f.type, f.rec_num): f for f in dev.frames if f.type == type_}
+            n = 0
+            ordinal = -1
+            for i, f in enumerate(self.dump.frames):
+                if f.type != type_:
+                    continue
+                ordinal += 1
+                if kind == "from" and ordinal != index:
+                    continue
+                repl = by_key.get((f.type, f.rec_num))
+                if repl is not None:
+                    self.dump.frames[i] = repl
+                    n += 1
+            self._rebind_tabs()
+            self._snapshot_baseline()
+            QMessageBox.information(self, "From LF+", f"Read {n} {tname} record(s) from the device.")
 
         self._run_device(work, ok, f"reading {tname}…", "From LF+ failed", wants_progress=True)
 
@@ -691,8 +678,7 @@ class MainWindow(QMainWindow):
             return
         self.path = path
         self._dirty = False
-        for w in self.tab_widgets:
-            w.set_dump(self.dump)
+        self._rebind_tabs()
         self._sync_qlist()
         self._snapshot_baseline()  # edits are tracked relative to the freshly-loaded file
         if self.transport is not None:
@@ -746,8 +732,7 @@ class MainWindow(QMainWindow):
         for rec in recs:
             for i in range(getattr(rec, "count", 0)):
                 rec.set_label(i, "")
-        for w in self.tab_widgets:
-            w.set_dump(self.dump)
+        self._rebind_tabs()
         self.mark_dirty()
         self.status.setText(f"Cleared {what} in {len(recs)} records")
 
@@ -844,8 +829,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Import failed", str(exc))
             return
         if applied:
-            for w in self.tab_widgets:
-                w.set_dump(self.dump)
+            self._rebind_tabs()
             self.mark_dirty()
         msg = f"Imported {applied} {label} record(s) from {os.path.basename(path)}."
         if warnings:
@@ -960,9 +944,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         if self.transport is not None:
-            from ..comms import disconnect, MODEL_FOOT
-            disconnect(self.transport, MODEL_FOOT)   # leave Editor Mode, then close
-            self.transport = None
+            self.disconnect_device()   # leave Editor Mode (CC), then close the port
         super().closeEvent(event)
 
 

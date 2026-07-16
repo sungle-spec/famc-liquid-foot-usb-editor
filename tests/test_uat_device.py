@@ -278,3 +278,43 @@ def test_read_back_overlays_device_record(qapp, monkeypatch):
     w.transfer("from", PRESET_TYPE, 1)
     ours_after = [fr for fr in w.dump.frames if fr.type == PRESET_TYPE][1].to_bytes()
     assert ours_after == new_bytes, "device record was not overlaid onto the loaded dump"
+
+
+def _bulk_silent_song(qapp, monkeypatch):
+    """A window whose bulk pull returns nothing, plus a device-side variant of Song #2 —
+    the setup for exercising _read_back's runtime per-record fallback."""
+    import copy
+    from lfeditor.codec import Dump
+    w = _win(qapp, FakeTransport(ack=True))
+    monkeypatch.setattr("lfeditor.comms.pull_dump", lambda *a, **k: Dump(), raising=False)
+    dev_song = copy.deepcopy([fr for fr in w.dump.frames if fr.type == SONG_TYPE][1])
+    dev_song.values[0] = (dev_song.values[0] + 1) & 0xFF
+    return w, dev_song
+
+
+def test_read_back_from_falls_back_to_per_record_when_bulk_silent(qapp, monkeypatch):
+    """A device that doesn't answer the bulk Song command (firmware variance) must still serve
+    a single-record 'From LF+' via the per-record path — the same fallback pull_dump uses."""
+    w, dev_song = _bulk_silent_song(qapp, monkeypatch)
+    asked = {}
+
+    def fake_one(transport, type_, rec_num, model):
+        asked["req"] = (type_, rec_num)
+        return dev_song
+    monkeypatch.setattr("lfeditor.comms.protocol.pull_one_record_per_record", fake_one)
+
+    w.transfer("from", SONG_TYPE, 1)
+    assert asked["req"] == (SONG_TYPE, dev_song.rec_num)
+    ours = [fr for fr in w.dump.frames if fr.type == SONG_TYPE][1]
+    assert ours.to_bytes() == dev_song.to_bytes()
+
+
+def test_read_back_all_from_falls_back_to_per_record_when_bulk_silent(qapp, monkeypatch):
+    """Same fallback for the all-of-type 'All From LF+' — recovered over pull_records_per_record."""
+    w, dev_song = _bulk_silent_song(qapp, monkeypatch)
+    monkeypatch.setattr("lfeditor.comms.protocol.pull_records_per_record",
+                        lambda *a, **k: [dev_song])
+
+    w.transfer("all_from", SONG_TYPE, 0)
+    ours = [fr for fr in w.dump.frames if fr.type == SONG_TYPE][1]
+    assert ours.to_bytes() == dev_song.to_bytes()
