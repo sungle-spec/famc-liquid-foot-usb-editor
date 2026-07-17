@@ -130,8 +130,8 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   blank the text-label records in the open document (confirm first). They edit the file offline;
   use **Hardware → To LF+** to push the cleared labels to the device.
 - **Hardware** — **Device Connection Setup…** (the EEPROM wizard), Connect/Disconnect, From LF+,
-  To LF+. *Reset Config / Reset to Factory / Load Firmware* are shown but disabled in this build
-  (device-side resets and firmware flashing aren't enabled yet).
+  To LF+, **USB MIDI Bridge…** (see below). *Reset Config / Reset to Factory / Load Firmware* are
+  shown but disabled in this build (device-side resets and firmware flashing aren't enabled yet).
 - **Complete Transfers** — Get-everything-from / Send-all-edits-to the device.
 - **Settings** — **Show raw bytes** toggles the raw-decoded-values table on every tab (off by
   default).
@@ -189,6 +189,18 @@ confirmed on a real Liquid Foot+ — see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIR
 > Writing to hardware is **off unless explicitly enabled** and always confirmed in the UI. The
 > device also speaks MIDI sysex (DIN/USB-MIDI) — that transport is built — but it presents as
 > USB-serial here.
+
+### USB MIDI Bridge
+
+**Hardware → USB MIDI Bridge…** turns the editor cable into a **bidirectional** live MIDI
+connection (hardware-confirmed `C9 → CA → CF` handshake). It temporarily disconnects Editor Mode
+and opens two virtual ports — **LF+ IN PORT** (computer → LF+: Program/Control Changes plus
+Clock/Start/Continue/Stop, needs the device global **Allow MIDI in = YES**) and **LF+ OUT PORT**
+(LF+ → computer: the controller's own channel MIDI, republished live). On Windows, where
+python-rtmidi can't create virtual ports, pick two distinct existing loopback endpoints instead.
+Stop the bridge (or reconnect the editor) to send `CC` and return the link to normal record
+transfers. Full sequence and filtering details: [docs/DESKTOP_GUIDE.md — Bidirectional MIDI over
+the editor cable](docs/DESKTOP_GUIDE.md#bidirectional-midi-over-the-editor-cable-usb-midi-bridge).
 
 ### Live pedal calibration
 
