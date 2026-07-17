@@ -14,6 +14,7 @@ from lfeditor.codec.frame import split_frames, Frame
 from lfeditor.comms import (
     handshake_frame, read_command, connect, pull_records, pull_dump, send_record,
     select_preset, FOOT_READ_CMDS, MODEL_FOOT,
+    usb_midi_stream_start_frame, usb_midi_stream_stop_frame,
 )
 from lfeditor.comms.protocol import FOOT_PER_RECORD_CMDS
 from lfeditor.comms import protocol
@@ -53,6 +54,15 @@ def test_handshake_frame_layout():
 def test_read_command_layout():
     f = read_command(0x05, MODEL_FOOT)
     assert list(f) == [0xF0, 0x00, 0x00, 0x7C, 0x0F, 0x0F, 0x05, 0xF7]
+
+
+def test_usb_midi_stream_frames_are_byte_exact():
+    assert usb_midi_stream_start_frame(MODEL_FOOT) == bytes.fromhex(
+        "f000007c0f0fcff7"
+    )
+    assert usb_midi_stream_stop_frame(MODEL_FOOT) == bytes.fromhex(
+        "f000007c0f0fccf7"
+    )
 
 
 def test_connect_handshake_then_session_ctrl():

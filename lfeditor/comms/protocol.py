@@ -20,10 +20,11 @@ Wire format (raw bytes — NOT MIDI; data may exceed 0x7F):
   against the real editor's captured traffic — three writes drew three ACKs). Belt-and-braces, a
   read-back also confirms it.
 
-The exact connect/read/write/disconnect sequence is the one the real LF+ Editor uses (verified by
-a DYLD interposer capture of its full serial session, connect → reads/writes → disconnect):
-handshake (×) → ``CA`` → get-commands → writes → ``CC`` (leave Editor Mode) → close port. See
-LF_USB_DIRECT.md.
+The exact editor connect/read/write/disconnect sequence is the one the real LF+ Editor uses
+(verified by a DYLD interposer capture of its full serial session, connect → reads/writes →
+disconnect): handshake (×) → ``CA`` → get-commands → writes → ``CC`` → close port. ``CC`` is a
+context-sensitive stop control: it leaves an ordinary editor session, stops expression-pedal live
+view, and stops the live USB-MIDI stream. See LF_USB_DIRECT.md.
 
 SAFETY: ``send_record`` refuses to transmit unless ``allow_write=True`` is passed explicitly.
 """
@@ -37,13 +38,16 @@ MODEL_FOOT = 0x7C    # Liquid Foot+ (also the device sysex ID in every frame hea
 MODEL_ROUTER = 0x7A  # Liquid Router (sibling device, same firmware family)
 DEFAULT_MODEL = MODEL_FOOT
 
-# Control bytes (all sent with the 0F 0F prefix), from the real editor's captured session:
+# Control bytes (all sent with the 0F 0F prefix), from captured original-editor sessions:
 #   C9 = handshake / enter Editor Mode   CA = session-begin (sent once after the handshake)
-#   CC = leave Editor Mode (the editor sends this on disconnect, then closes the port)
+#   CF = start live bidirectional USB-MIDI streaming (after C9 + CA)
+#   CC = context-sensitive stop: editor disconnect, USB-MIDI stream, or expression live view
 HANDSHAKE_CTRL = 0xC9
 SESSION_CTRL = 0xCA
-EXIT_CTRL = 0xCC
-LIVE_VIEW_CTRL = 0xD2   # start streaming live expression-pedal positions (stop with EXIT_CTRL/CC)
+USB_MIDI_STREAM_START_CTRL = 0xCF
+USB_MIDI_STREAM_STOP_CTRL = 0xCC
+EXIT_CTRL = USB_MIDI_STREAM_STOP_CTRL  # compatibility name for ordinary editor disconnect
+LIVE_VIEW_CTRL = 0xD2   # start expression-pedal positions (also stopped by context-sensitive CC)
 READ_PREFIX = (0x0F, 0x0F)
 WRITE_ACK = b"\xf0\x09\xf7"  # the device's per-write acknowledgement
 LIVE_WRITE_PRELUDE = b"\xff"  # 0xFF byte the editor sends before writing config *during* live view
@@ -136,10 +140,10 @@ def select_preset(transport: Transport, preset_1based: int, midi_chan: int = 0) 
     """Select a preset on the device via Bank Select (CC0) + Program Change.
 
     **Hardware-confirmed 2026-07-15**: the LF+ acts on channel-voice CC/PC arriving on the
-    USB-serial UART (in and out of Editor Mode) — but ONLY when the device global
-    "Allow MIDI CMDS" is YES (Config rec 0 value[47]) AND `midi_chan` matches the device's
-    global MIDI channel (Config rec 0 value[49], 0-based). Same mechanism the USB MIDI In
-    Bridge (ui/midi_bridge.py) uses."""
+    USB-serial UART — but ONLY when the device global "Allow MIDI in" is YES (Config rec 0
+    value[47]) AND `midi_chan` matches the device's global MIDI channel (Config rec 0 value[49],
+    0-based). The bidirectional USB MIDI Bridge uses this conservative input route after the
+    verified C9 → CA → CF live-stream setup."""
     if not 1 <= preset_1based <= 384:
         return
     n = preset_1based - 1
@@ -154,8 +158,22 @@ def session_frame(model: int = DEFAULT_MODEL) -> bytes:
 
 
 def exit_frame(model: int = DEFAULT_MODEL) -> bytes:
-    """The 'leave Editor Mode' control (CC) the editor sends on disconnect (no reply)."""
+    """The CC stop control used for an ordinary editor disconnect (no reply).
+
+    The same byte has context-sensitive stop semantics for USB-MIDI streaming and expression
+    live view; use their explicitly named builders in those contexts.
+    """
     return frame_bytes(model, *READ_PREFIX, EXIT_CTRL)
+
+
+def usb_midi_stream_start_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """Start verified LF+ live USB-MIDI streaming after the C9 → CA session setup."""
+    return frame_bytes(model, *READ_PREFIX, USB_MIDI_STREAM_START_CTRL)
+
+
+def usb_midi_stream_stop_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """Stop LF+ live USB-MIDI streaming while leaving the serial port open."""
+    return frame_bytes(model, *READ_PREFIX, USB_MIDI_STREAM_STOP_CTRL)
 
 
 def live_view_start_frame(model: int = DEFAULT_MODEL) -> bytes:
@@ -165,8 +183,8 @@ def live_view_start_frame(model: int = DEFAULT_MODEL) -> bytes:
 
 
 def live_view_stop_frame(model: int = DEFAULT_MODEL) -> bytes:
-    """Stop the live stream — the editor reuses the leave-Editor-Mode control (CC)."""
-    return frame_bytes(model, *READ_PREFIX, EXIT_CTRL)
+    """Stop expression-pedal live view with the context-sensitive CC stop control."""
+    return frame_bytes(model, *READ_PREFIX, USB_MIDI_STREAM_STOP_CTRL)
 
 
 def parse_live_positions(buf: bytes) -> tuple[list[list[int]], bytes]:

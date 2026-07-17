@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         self._record_clip = None  # whole-record copy buffer (see ui/record_ops.py)
         self._find_dialog = None  # the non-modal Find / Q-LIST window
         self._midi_monitor = None  # the non-modal MIDI monitor / pass-thru window
-        self._midi_bridge = None   # the non-modal USB MIDI In Bridge window
+        self._midi_bridge = None   # the non-modal bidirectional USB MIDI Bridge window
         self._device_busy = False  # True while a _DeviceTask transfer runs (bridge pauses)
 
         self.setWindowTitle("LF+ Editor (native)")
@@ -161,9 +161,9 @@ class MainWindow(QMainWindow):
         hw.addAction("From LF+ (read all)", self.pull_from_device)
         hw.addAction("To LF+ (write edits)", self.push_to_device)
         hw.addSeparator()
-        act = hw.addAction("USB MIDI In Bridge…", self.open_midi_bridge)
-        act.setToolTip("Send MIDI commands (preset changes, IA triggers) to the LF+ over this "
-                       "USB cable — needs the device global “Allow MIDI CMDS = YES”")
+        act = hw.addAction("USB MIDI Bridge…", self.open_midi_bridge)
+        act.setToolTip("Bidirectional MIDI over the LF+ USB port. DAW → LF+ commands need the "
+                       "device global “Allow MIDI in = YES”.")
         hw.addSeparator()
         for name in ("Reset Config in LF+", "Reset LF+ to Factory Defaults",
                      "Load Firmware From File…", "Review / Install Latest Firmware…"):
@@ -368,7 +368,7 @@ class MainWindow(QMainWindow):
         self.conn.setStyleSheet(f"color: {color}; padding-right: 10px;")
 
     def _set_busy(self, busy: bool, msg: str = ""):
-        self._device_busy = busy   # the USB MIDI In Bridge pauses forwarding while True
+        self._device_busy = busy   # also prevents bridge startup during a record transfer
         self.act_connect.setEnabled(not busy)
         self.act_from.setEnabled(not busy and self.transport is not None)
         self.act_to.setEnabled(not busy and self.transport is not None and self.dump is not None)
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
     def connect_device(self):
         """Open the USB-serial link and handshake into Editor Mode (see docs/LF_USB_DIRECT.md)."""
         from ..comms import find_serial_ports, SerialTransport, connect, MODEL_FOOT
-        # A running USB MIDI In Bridge holds the port raw — release it for the editor session.
+        # A running USB MIDI Bridge owns the live serial session — stop it with CC first.
         bridge = getattr(self, "_midi_bridge", None)
         if bridge is not None and bridge.running:
             bridge.stop()
@@ -943,6 +943,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"LF+ Editor (native, emulates v6.31) — {name} {star}")
 
     def closeEvent(self, event):
+        bridge = getattr(self, "_midi_bridge", None)
+        if bridge is not None:
+            bridge.stop()              # sends CC before releasing bridge-owned serial
         if self.transport is not None:
             self.disconnect_device()   # leave Editor Mode (CC), then close the port
         super().closeEvent(event)

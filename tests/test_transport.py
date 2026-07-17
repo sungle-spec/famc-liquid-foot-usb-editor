@@ -1,4 +1,4 @@
-"""Offline tests for SerialTransport.read_one_frame (no hardware needed).
+"""Offline tests for SerialTransport non-blocking and framed reads (no hardware needed).
 
 Constructs SerialTransport via __new__ (bypassing __init__'s real serial.Serial() open) and
 substitutes a fake `.ser` exposing just `in_waiting`/`read()`, mirroring pyserial's interface.
@@ -53,3 +53,32 @@ def test_read_one_frame_times_out_on_no_reply():
     t = _transport(b"")
     got = t.read_one_frame(overall_timeout=0.05)
     assert got == b""
+
+
+def test_read_available_reads_only_currently_buffered_bytes_and_honours_cap():
+    t = _transport(b"abcdefghij", chunk_size=6)
+    assert t.read_available(max_bytes=4) == b"abcd"
+    assert t.read_available(max_bytes=10) == b"efghij"
+    assert t.read_available(max_bytes=10) == b""
+
+
+def test_read_available_rejects_non_positive_cap():
+    import pytest
+
+    t = _transport(b"abc")
+    with pytest.raises(ValueError):
+        t.read_available(max_bytes=0)
+
+
+def test_read_available_propagates_device_removal():
+    import pytest
+
+    class RemovedSerial:
+        @property
+        def in_waiting(self):
+            raise OSError("device removed")
+
+    t = SerialTransport.__new__(SerialTransport)
+    t.ser = RemovedSerial()
+    with pytest.raises(OSError, match="device removed"):
+        t.read_available()

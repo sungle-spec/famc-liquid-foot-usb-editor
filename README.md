@@ -36,7 +36,7 @@ write-up.
 | P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 297 tests total |
 | P4 — App shell + Presets tab | ✅ runnable (`python -m lfeditor`) |
 | P5 — Remaining tabs | ✅ all 11 tabs; **data model complete** — every user-facing control mapped (extension records, command tables, full Config: LCD/Extender/Tap-Tempo/Combo, exp-pedals, colours) |
-| P6 — Device comms (USB-serial + MIDI) | ✅ **read + write confirmed on real hardware** (USB-serial); see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md) |
+| P6 — Device comms (USB-serial + MIDI) | ✅ **record read/write + bidirectional live USB MIDI confirmed on real hardware**; see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md) |
 | P7 — Packaging & docs | ✅ Standalone builds for **Windows / Linux / macOS** via a CI matrix (`.exe` zip · AppImage · `.app`); USER_GUIDE + [docs/BUILD.md](docs/BUILD.md) |
 | P8 — Faithful UI rebuild | ✅ all 11 tabs rebuilt to the original v6.31 layout — dark FAMC theme, per-record transfer header, titled section panels, vertical rocker toggles, green LCD fields; **Midi/Groups** (two-col channel grid), **Pages** (graphical pedalboard + page-group navigator), **Global** (5-column, every mapped Config field surfaced), **IA-Maps** (6×10 name pickers), **Set-List** (5×12), **Colors** (4-col), and extension-record label panels on **Presets**/**Songs**, **Songs MTC** (enable + Hr/Min/Sec/Frame), and **Pages** button-function labels decoded to names. Build spec captured in [docs/ui/ORIGINAL_LAYOUT.md](docs/ui/ORIGINAL_LAYOUT.md). All 11 tabs match the original v6.31 layout |
 | P9 — Host-side workflow parity | ✅ icon toolbar; whole-record **copy/paste/clear**; **CSV import/export** + **Reports** (format captured byte-for-byte from the original); **Find** search (name + MIDI-command queries); a left-side **Q-LIST** navigator dock that follows the current tab, with **drag-drop** onto slot pickers / command rows; **right-click multi-record** toggle edits; **MIDI Monitor / Pass-Thru**; **Quick Repeated Command Programmer**; **Re-order with Save/Sync** reference rewrite; **About / License** dialog; **EEPROM wizard**. See [docs/FIRMWARE_NOTES.md](docs/FIRMWARE_NOTES.md) for the original-vs-rebuild feature audit |
@@ -90,6 +90,11 @@ byte-for-byte; only changed records change):
 - **Hardware → Device Connection Setup** — the FTDI-EEPROM wizard that exposes the device's serial
   port on macOS (one-time; see [Getting started §4](docs/GETTING_STARTED.md#4-connect-your-lf-macos-one-time-setup)
   and the [illustrated walkthrough](docs/DESKTOP_GUIDE.md#first-time-setup-make-the-device-appear-as-a-serial-port)).
+- **Hardware → USB MIDI Bridge** — starts the hardware-confirmed `C9 → CA → CF` live mode and
+  exposes **LF+ IN PORT / LF+ OUT PORT** as a bidirectional virtual MIDI device on macOS/Linux. It preserves the
+  proven DAW→LF+ CC/PC filter and republishes parsed LF+ channel MIDI to the computer; Windows
+  uses two user-selected loopback endpoints because python-rtmidi cannot create native virtual
+  ports there.
 - **Firmware / bricked units** — a standalone **[LF+ Firmware Loader (beta)](docs/FIRMWARE_LOADER.md)**
   targets recovery of units bricked by failed firmware updates (community-tested; the editor's own
   *Load Firmware* stays disabled until it graduates).
@@ -117,6 +122,14 @@ differ); writes are proven (preset write→read→restore, end-to-end through `s
 one. See [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md). Raw Song/Setlist/Page/IASwitch records
 aren't exposed over this USB path (edit them offline); MIDI transport is built but the device
 presents as USB-serial here.
+
+The same USB-serial connection also has a distinct **live bidirectional MIDI mode**. The bridge
+validates the normal `C9` identification reply, sends `CA` then `CF`, and pumps both directions
+without sharing the port with Editor Mode record transfers. `CC` stops streaming before close.
+Computer→LF+ forwards the proven CC/PC route plus MIDI Clock/Start/Continue/Stop for hardware
+validation; Active Sensing, System Reset, and all computer SysEx remain blocked. LF+→computer
+also forwards safe realtime and unambiguous 7-bit musical SysEx, while known FAMC frame shapes,
+malformed SysEx, and System Reset remain filtered.
 
 Deeper per-field offsets are mapped one at a time via `scripts/diff_dumps.py` (diff two
 live-editor exports). See [docs/LF_DATA_MODEL.md](docs/LF_DATA_MODEL.md).

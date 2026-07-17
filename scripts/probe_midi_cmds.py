@@ -4,7 +4,7 @@ Probe: does the LF+ act on CHANNEL-VOICE MIDI commands arriving over the USB-ser
 
 The manual's MIDI Implementation chart (last page) lists the commands the device accepts —
 Bank Change (CC#0), Program Change, IA triggers (CC#1-4), Page functions (CC#5-6), MTC
-(CC#7-8) — all gated behind the global "Allow MIDI CMDS = YES". Every earlier probe ran with
+(CC#7-8) — all gated behind the global "Allow MIDI in = YES". Every earlier probe ran with
 that global OFF (confirmed from the 2026-07-15 backup: Config rec 0 value[47] = 0), so the
 door was closed. The old FAMC CoreMIDI driver presented the USB link as a MIDI port, which
 suggests the firmware may route UART channel-voice bytes into the same MIDI engine as DIN.
@@ -12,8 +12,8 @@ If it does, a "drive the LF+ from a DAW over the editor cable" bridge becomes po
 
 Run in two stages around flipping the global ON THE FRONT PANEL (no editor writes needed):
 
-    python scripts/probe_midi_cmds.py --stage control   # Allow MIDI CMDS still NO (baseline)
-    #   ...flip Global menu -> "Allow MIDI CMDS" -> YES on the device...
+    python scripts/probe_midi_cmds.py --stage control   # Allow MIDI in still NO (baseline)
+    #   ...flip Global menu -> "Allow MIDI in" -> YES on the device...
     python scripts/probe_midi_cmds.py --stage open      # the real test
     #   ...flip it back to NO (or keep it; it's a performance setting)...
 
@@ -112,7 +112,7 @@ def midi_pass(ser, chan0, label):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stage", choices=["control", "open"], required=True,
-                    help="control = Allow MIDI CMDS still NO (baseline); "
+                    help="control = Allow MIDI in still NO (baseline); "
                          "open = after flipping it to YES on the front panel")
     ap.add_argument("--chan", type=int, default=16,
                     help="device global MIDI channel, 1-based (backup says 16)")
@@ -127,9 +127,9 @@ def main():
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log(f"probe_midi_cmds  {ts}  stage={args.stage}  port={port}  midi-chan={args.chan}")
     if args.stage == "control":
-        log("(baseline: Allow MIDI CMDS should still be NO — expecting no LCD reaction)")
+        log("(baseline: Allow MIDI in should still be NO — expecting no LCD reaction)")
     else:
-        log("(Allow MIDI CMDS should now be YES on the panel — the real test)")
+        log("(Allow MIDI in should now be YES on the panel — the real test)")
 
     captures = {}
 
@@ -162,8 +162,9 @@ def main():
     logfile.write_text("\n".join(log_lines) + "\n")
     print(f"\nLog -> {logfile}")
     print("\nGate: LCD changed preset / fired an IA in ANY state during the 'open' stage")
-    print("-> channel MIDI over USB is REAL (build the bridge). No reaction in all states")
-    print("with the flag on -> MIDI over USB is firmware-limited in every tier.")
+    print("-> the computer→LF+ CC/PC route is present. No reaction in all states with the")
+    print("flag on means this inbound probe did not observe it; it does not test the separate")
+    print("C9 → CA → CF gated LF+→computer output stream.")
 
 
 if __name__ == "__main__":

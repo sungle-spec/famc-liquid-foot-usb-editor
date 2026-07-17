@@ -145,7 +145,11 @@ class IntField(Field):
 
     def build(self):
         self.w = QSpinBox()
-        self.w.setRange(self.lo, self.hi)
+        # `lo`/`hi` describe stored values. A plus-one field must expose the correspondingly
+        # shifted display range or QSpinBox clamps raw 15 + 1 back to 15 (the Global MIDI-channel
+        # bug) and can write the wrong byte back.
+        display_offset = 1 if self.plus_one else 0
+        self.w.setRange(self.lo + display_offset, self.hi + display_offset)
         self.w.valueChanged.connect(self._write)
         return self.w
 

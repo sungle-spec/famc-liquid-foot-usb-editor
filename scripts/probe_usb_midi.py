@@ -162,9 +162,9 @@ def main():
     logfile = ART / f"usb_midi_{ts}.log"
     logfile.write_text("\n".join(log_lines) + "\n")
     print(f"\nLog -> {logfile}")
-    print("\nInterpretation: LED synced in any phase -> clock-over-USB is real (gate B0a). "
-          "Bytes received while pressing buttons -> UART emits MIDI (gate B0b, full bridge "
-          "feasible). Neither -> the honest DIN answer (B1').")
+    print("\nInterpretation: LED sync would confirm clock in one of these legacy states. "
+          "Received switch bytes would show unsolicited UART output. Silence does NOT test or "
+          "rule out the later-confirmed C9 → CA → CF gated live-MIDI stream.")
 
 
 if __name__ == "__main__":
