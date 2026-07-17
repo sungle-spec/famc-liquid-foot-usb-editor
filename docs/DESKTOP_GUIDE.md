@@ -234,21 +234,36 @@ must be in the `dialout` group; **macOS** works out of the box.
 
 **Complete Transfers** menu = the same pull/push, phrased as "get everything / send all edits".
 
-### Drive the LF+ from a DAW over the same cable (USB MIDI In Bridge)
+### Bidirectional MIDI over the editor cable (USB MIDI Bridge)
 
-**Hardware ▸ USB MIDI In Bridge…** turns the editor cable into a MIDI *input* for the device:
-it creates a virtual MIDI port named **"LF+ USB"** (macOS/Linux; on Windows install loopMIDI
-and pick its port instead) and forwards Program Changes and CCs to the LF+ — so a DAW or
-sequencer can switch presets and fire IA slots (the manual's CC#1–8 trigger set) with no MIDI
-interface at all. Two requirements:
+**Hardware ▸ USB MIDI Bridge…** recovers the original editor's bidirectional USB-MIDI mode.
+Start validates the normal LF+ identification handshake, then sends `C9 → CA → CF`. The LF+
+returns to its normal preset/control display, physical switches remain active, and the still-open
+serial link carries MIDI in both directions.
 
-* The device global **"Allow MIDI CMDS" must be YES** (Global tab → To LF+, or the front
-  panel's Global menu), and your DAW must send on the device's **global MIDI channel**.
-* The LF+ ignores MIDI while in Editor Mode, so the bridge and the editor connection take
-  turns: starting the bridge offers to disconnect, and clicking Connect stops the bridge.
+On macOS/Linux the bridge creates one virtual input/output endpoint pair named **"LF+ IN PORT / LF+ OUT PORT"**.
+Select that device as both a MIDI destination and source in the DAW. python-rtmidi cannot create
+native virtual endpoints on Windows, so create and select **two distinct** loopback ports there
+(one for each direction); using one port for both can create a feedback loop.
 
-Clock/realtime is not supported (the firmware ignores it on USB — see FIRMWARE_NOTES.md), and
-the device does not send MIDI back over USB; this is a one-way command input.
+* **DAW → LF+:** Program Changes and Control Changes retain the hardware-proven route, allowing
+  preset selection and the manual's CC trigger set. The device global **"Allow MIDI in" must be
+  YES**, and the DAW must use the LF+'s global MIDI channel. MIDI Clock, Start, Continue, and Stop
+  are also forwarded for validation against the controller's DIN-clock behaviour. Active Sensing,
+  System Reset, computer-originated SysEx, and unverified channel messages are filtered.
+* **LF+ → DAW:** complete channel messages from the LF+ are republished exactly, including Notes,
+  Poly/Channel Pressure, CC, Program Change, and Pitch Bend. Fragmented messages and running
+  status are reconstructed. Clock, Start, Continue, Stop, and Active Sensing are forwarded without
+  disturbing running status; System Reset is filtered. Valid 7-bit SysEx is forwarded unless it
+  matches a known FAMC editor/control, reply, or ACK shape. FAMC-looking and malformed frames stay
+  blocked because they cannot be distinguished safely from protocol traffic.
+
+Editor Mode record transfers and the live bridge are mutually exclusive: starting the bridge
+offers to disconnect the editor session, and clicking **Connect** stops the bridge by sending
+`CC` before closing the serial port. Stop is safe to repeat and leaves the bridge restartable.
+
+On the **Global** page, the Hardware MIDI Channel and **Expander via MIDI CHAN** controls display
+channels **1–16**. The device data remains firmware-compatible and stores those values as 0–15.
 
 ### Calibrate expression pedals live
 

@@ -97,41 +97,35 @@ bits as friendly controls — not missing storage.
 double-tap latency, expander ("X-Series") going out of beta. These are runtime behaviours with no
 stored field — nothing for the editor to add.
 
-> **On the original "USB MIDI function"** (asked about on the forum): with FAMC's old macOS
-> driver the LF+ appeared as a native **CoreMIDI port** over USB, and the 2013 editor drove it
-> entirely through `javax.sound.midi`. That driver-level MIDI port is what people remember —
-> but even then, realtime **MIDI clock was never carried over USB** (no clock/thru code exists
-> in the decompiled editor); tempo-LED sync has always been a MIDI-DIN-IN feature of the device
-> firmware.
+> **The original "USB MIDI function" is recovered bidirectionally.** A 2026-07-18 DYLD serial-
+> interposer capture of the original editor's MIDI Pass Thru utility found the missing `CF`
+> gate: normal identification handshake `C9`, setup `CA`, then `CF` starts live raw MIDI on the
+> still-open FTDI UART. The LF+ returns to its normal display, physical switches work, and their
+> channel MIDI is read by the editor and republished through its CoreMIDI source. `CC` stops that
+> output stream before close.
 >
-> **Confirmed on hardware 2026-07-15** (`scripts/probe_usb_midi.py`, a real Liquid Foot+ 12+):
-> streamed MIDI realtime clock (`0xF8`, 24 ppqn) down the USB-serial link at 120 BPM across three
-> device states — no handshake at all, mid-handshake, and just after leaving Editor Mode — with
-> the tempo LED watched directly. **No reaction in any state**, across two runs. The device also
-> never emitted a single byte on the UART on its own (tested by pressing buttons/switching
-> presets while listening), ruling out a bidirectional USB-MIDI bridge too. The serial link is
-> confirmed strictly one-way and non-MIDI in practice, exactly as the wire-format docs above say.
+> This supersedes the earlier negative inference from `scripts/probe_usb_midi.py`. That probe
+> listened on a raw port, in Editor Mode, and after `CC`, but never issued `CF`; its silence only
+> proved that LF+ output is not unsolicited in those states. It could not rule out the gated
+> pass-thru mode.
 >
-> **The official LF+ manual backs this up independently.** Its "MIDI Implementation" chart (the
-> very last page, PDF p.97) lists the *complete* set of MIDI commands the device accepts —
-> Bank Change, Program Change, Trigger IA (ON/OFF/BYPASS/TOGGLE), Page-function press, and MTC
-> Stop/Play/Cancel — eight commands total, all standard PC/CC messages. **MIDI Clock isn't in
-> that list at all, on either DIN or USB.** "Tap Tempo" (manual p.72) is the device *calculating
-> and displaying* a tempo from foot taps, not receiving external clock; "Sync"/"External Sync"
-> throughout the manual means AXE-FX/Kemper effect-parameter mirroring, a different feature
-> entirely. So DIN clock-sync (if it works at all, per the forum report) isn't an officially
-> documented device feature either — the editor cannot add or bridge what the firmware's own
-> published MIDI implementation never advertised as a receivable command. Our MIDI Monitor /
-> Pass-Thru already relays clock to a device's DIN input via any USB-MIDI interface, which
-> remains the practical path for users who want external clock into the unit.
+> The opposite route is also hardware-confirmed: with global **"Allow MIDI in = YES"**, the LF+
+> processes Bank/PC/CC-trigger messages received on the same serial connection. The manual's
+> receive chart supports keeping that direction conservative: Bank Change, Program Change,
+> Trigger IA (ON/OFF/BYPASS/TOGGLE), Page functions, and MTC Stop/Play/Cancel are PC/CC messages.
+> This does not limit what user programming may emit in the LF+→computer direction.
 >
-> **But the chart's commands DO work over USB — recovered 2026-07-15.** With the global
-> "Allow MIDI CMDS = YES", the LF+ processes Bank/PC/CC-trigger messages arriving raw on the
-> USB-serial link (hardware-confirmed; Editor Mode blocks them, so it's an either/or with
-> record transfers). The editor's **Hardware ▸ USB MIDI In Bridge** exposes this as a virtual
-> MIDI port ("LF+ USB") — a DAW can switch presets and fire IA slots over the editor cable,
-> which is more than the original editor ever wired up. Full tiered verdict in
-> [LF_USB_DIRECT.md](LF_USB_DIRECT.md) ("Channel MIDI on the UART").
+> Realtime/clock reception was not re-verified inside the newly identified `CF` session. The
+> bridge now forwards computer→LF+ Clock/Start/Continue/Stop for validation against the LF+'s
+> known DIN-clock behaviour, but still blocks Active Sensing, System Reset, and all computer
+> SysEx. LF+→computer forwards Clock/Start/Continue/Stop/Active Sensing without disturbing
+> running status; System Reset remains filtered.
+>
+> Ordinary LF+-generated 7-bit SysEx is forwarded only when it does not match known FAMC
+> control/reply/ACK frame shapes. FAMC-looking, malformed, and non-7-bit frames stay filtered
+> because they cannot be distinguished safely from editor protocol traffic on this carrier.
+> Full sequences and filtering details are in [LF_USB_DIRECT.md](LF_USB_DIRECT.md) ("Live
+> bidirectional MIDI on the UART").
 
 ## Does the firmware reveal editor features we're missing?
 

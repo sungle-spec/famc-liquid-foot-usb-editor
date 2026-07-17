@@ -203,32 +203,65 @@ depth: they automatically fall back to the per-record path for any of Song/Setli
 bulk phase doesn't answer on a given device/firmware, so this degrades gracefully rather than
 losing data even outside the one 12+ unit this was verified against.
 
-### Channel MIDI on the UART — confirmed 2026-07-15 (the "USB MIDI" recovery)
+### Live bidirectional MIDI on the UART — confirmed 2026-07-18
 
-With the device global **"Allow MIDI CMDS = YES"** (Config rec 0 `value[47]`; also gated on the
-global MIDI channel, `value[49]`), the LF+ **acts on channel-voice MIDI sent raw down the
-USB-serial link**: Bank CC#0 + Program Change switches presets, and the manual's CC#1–8 trigger
-set applies (IA on/off/bypass/toggle, page functions, MTC stop/play/cancel). Confirmed on a real
-LF+ 12+ via `scripts/probe_midi_cmds.py` — the LCD followed PC changes sent at 230400 baud on a
-raw port. Two hard limits, both firmware-side:
+A DYLD serial-interposer capture of the original editor's **MIDI Pass Thru** utility identified
+the missing gate. The earlier `scripts/probe_usb_midi.py` experiment listened on a raw port,
+inside Editor Mode, and after `CC`, but never sent `CF`; its silence showed only that LF+ output
+is not unsolicited in those states. It did **not** test the gated live-MIDI mode.
 
-* **Editor Mode discards MIDI commands.** A PC sent mid-session is not processed (verified: sent
-  "go to preset 4" in Editor Mode, exited — device still on preset 1). Editor transfers and MIDI
-  command input are mutually exclusive uses of the link.
-* Realtime (clock etc.) stays ignored in every state, and the device never sources MIDI on the
-  UART (the complete capture vocabulary above has no device→host stream) — so this is a one-way,
-  commands-only channel, not a full USB-MIDI port.
+The captured start sequence is byte-exact:
 
-The editor's **Hardware ▸ USB MIDI In Bridge** (`lfeditor/ui/midi_bridge.py`) builds on this: it
-opens the port raw (no handshake), creates a virtual MIDI input ("LF+ USB") on macOS/Linux — or
-listens on a loopMIDI port on Windows — and forwards CC/PC byte-identical, so a DAW can switch
-presets and fire IA slots over the editor cable. Sysex/realtime are filtered out.
+```text
+F0 00 00 7C 0F 0F C9 00 00 00 00 F7   C9 identification handshake (reply required)
+F0 00 00 7C 0F 0F CA F7               CA session/pass-thru setup (no reply observed)
+F0 00 00 7C 0F 0F CF F7               CF start live USB-MIDI stream
+```
 
-### The real editor's full session (DYLD-interposer capture)
+After `CF`, the LF+ leaves Editor Mode visually, returns to its normal preset/control display,
+and keeps its physical switches active. Switch-generated MIDI appears as ordinary raw channel
+bytes on the still-open FTDI connection, for example:
+
+```text
+B2 00 00   B2 20 00   C2 01   B2 45 00
+```
+
+The same serial connection accepts the already-proven computer→LF+ CC/PC route. That direction
+still requires device global **"Allow MIDI in = YES"** (Config rec 0 `value[47]`) and the
+matching global MIDI channel (`value[49]`). Editor record transfer and live bridge streaming stay
+mutually exclusive owners of the link.
+
+The captured stop command is:
+
+```text
+F0 00 00 7C 0F 0F CC F7               CC stop live USB-MIDI stream
+```
+
+`CC` stops LF+→computer transmission while leaving the hardware in its normal display. It is a
+context-sensitive stop control: ordinary editor disconnect also uses it before close, and
+expression-pedal live view uses it before re-entering its editor session. Bytes already buffered
+or in flight after `CC` must be discarded.
+
+The editor's **Hardware ▸ USB MIDI Bridge** (`lfeditor/ui/midi_bridge.py`) implements this mode in
+place of the former one-way assumption. macOS/Linux get one virtual input/output endpoint pair
+named **"LF+ IN PORT / LF+ OUT PORT"**; Windows retains user-selected existing loopback endpoints because
+python-rtmidi cannot create native virtual ports there. Computer-originated SysEx is never put on
+the UART. Computer→LF+ forwards CC/PC plus `F8` Clock, `FA` Start, `FB` Continue, and `FC` Stop;
+`FE` Active Sensing and `FF` System Reset remain blocked. LF+-originated channel messages are
+parsed across fragmented reads and running status, and safe realtime (`F8`, `FA`–`FC`, `FE`) is
+republished without changing parser state. `FF` remains filtered.
+
+LF+-originated SysEx is forwarded only when every payload byte is valid 7-bit MIDI and the frame
+does not match a known FAMC shape (`F0 00 00 7C…`, `F0 05 00 7C…`, or `F0 09…`). Those FAMC-
+looking frames remain blocked even if user-programmed because they are indistinguishable from
+editor/control, device-reply, and ACK traffic on the shared carrier. Malformed/oversized frames
+are bounded and filtered.
+
+### The real editor's full record-editing session (DYLD-interposer capture)
 
 A DYLD-interposer capture of the official LF+ Editor's serial traffic with a real Foot
-(see `docs/HARDWARE_RE_CAPTURE.md` for the procedure) shows the complete protocol — and its
-**entire** command vocabulary:
+(see `docs/HARDWARE_RE_CAPTURE.md` for the procedure) shows the complete ordinary
+**record-editing** sequence. The separate MIDI Pass Thru capture above adds `CF`:
 
 ```
 >>W f000007c0f0fc900000000f7   handshake (sent twice)
@@ -243,7 +276,8 @@ A DYLD-interposer capture of the official LF+ Editor's serial traffic with a rea
 
 So a "full preset" write is **three records** (main + ext9 + ext10), and the device **ACKs every
 write**. On **disconnect** the editor sends one more control frame — `F0 00 00 7C 0F 0F CC F7`
-(**CC = leave Editor Mode**) — then closes the port; the device's LCD returns to normal. (An
+(**CC stops/leaves Editor Mode in this record-session context**) — then closes the port; the
+device's LCD returns to normal. (An
 earlier, *truncated* capture had cut off before the disconnect, which is why this was first
 mis-recorded as "no exit command exists" — re-capturing the full connect→disconnect session with
 the interposer revealed the `CC` frame.)

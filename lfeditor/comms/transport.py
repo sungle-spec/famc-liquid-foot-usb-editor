@@ -39,11 +39,11 @@ def split_sysex(buf: bytes) -> list[bytes]:
 
 
 class SerialTransport:
-    """USB-serial (FTDI VCP) carrier, mirroring the Liquid Router's link.
+    """USB-serial (FTDI VCP) carrier for the hardware-confirmed LF+ link.
 
-    NOTE: the LF+ serial baud and whether it needs a handshake are **unconfirmed** (the JAR
-    used MIDI only). Defaults mirror the Router (230400, DTR/RTS, optional handshake frame);
-    adjust once tested on hardware. `handshake` bytes default to None (no handshake)."""
+    The LF+ uses 230400 baud with DTR/RTS held high. Protocol handshakes are normally driven by
+    ``protocol.connect``; ``handshake`` remains an optional compatibility hook.
+    """
 
     def __init__(self, port: str, baud: int = 230400, handshake: bytes | None = None):
         import serial  # lazy
@@ -79,6 +79,20 @@ class SerialTransport:
         """Raw drained bytes (the Foot's read stream is decoded blocks, not F0..F7 frames)."""
         data = self._drain(idle_timeout, overall_timeout)
         return [data] if data else []
+
+    def read_available(self, max_bytes: int = 4096) -> bytes:
+        """Return only bytes already buffered by the serial driver, without waiting.
+
+        Exceptions from ``in_waiting`` or ``read`` deliberately propagate so a continuously
+        running bridge can detect device removal and enter its normal cleanup path. This method
+        never changes DTR/RTS and never resets the input buffer.
+        """
+        if max_bytes < 1:
+            raise ValueError("max_bytes must be positive")
+        available = self.ser.in_waiting
+        if available <= 0:
+            return b""
+        return bytes(self.ser.read(min(available, max_bytes)))
 
     def read_frames(self, idle_timeout: float = 1.0, overall_timeout: float = 10.0) -> list[bytes]:
         return split_sysex(self._drain(idle_timeout, overall_timeout))
