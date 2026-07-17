@@ -497,16 +497,17 @@ const LFRender = (() => {
     const navInner = el("div", "navinner");
     navInner.appendChild(el("div", "note", "Click a page box to display it as a group"));
     const groupBoxes = [];
-    for (let g = 0; g < NUM_GROUPS; g++) {
+    for (let g = NUM_GROUPS - 1; g >= 0; g--) {
       const cell = el("div", "groupcell");
       const gb = el("div", "groupbox");
+      gb.dataset.group = g;
       for (let s = 0; s < GROUP_SIZE; s++) { const b = g * GROUP_SIZE + slotToOffset(s); gb.appendChild(el("span", "grpnum", String(b + 1))); }
       gb.onclick = () => { group = g; if (!(g * GROUP_SIZE <= sel && sel < (g + 1) * GROUP_SIZE)) { selectButton(g * GROUP_SIZE); } else { paintBoard(); paintGroups(); } };
       groupBoxes.push(gb);
       cell.appendChild(gb); cell.appendChild(el("div", "grpcap", `Start ${g * GROUP_SIZE + 1}`));
       navInner.appendChild(cell);
     }
-    function paintGroups() { groupBoxes.forEach((gb, g) => gb.classList.toggle("sel", g === group)); }
+    function paintGroups() { groupBoxes.forEach(gb => gb.classList.toggle("sel", +gb.dataset.group === group)); }
 
     const boardSec = el("div", "section");
     boardSec.appendChild(el("div", "title", "Click a button to edit it below — drag onto another to swap (Shift-drag to copy)"));

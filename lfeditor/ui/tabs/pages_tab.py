@@ -247,7 +247,7 @@ class PagesTab(QWidget):
         hint.setObjectName("sectionNote")
         v.addWidget(hint)
         self.group_boxes: list[GroupBox] = []
-        for g in range(NUM_GROUPS):
+        for g in reversed(range(NUM_GROUPS)):
             gb = GroupBox(g)
             gb.picked.connect(self._set_group)
             self.group_boxes.append(gb)
