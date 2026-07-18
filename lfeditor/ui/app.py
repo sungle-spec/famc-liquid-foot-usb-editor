@@ -49,6 +49,7 @@ class MainWindow(QMainWindow):
         self._find_dialog = None  # the non-modal Find / Q-LIST window
         self._midi_monitor = None  # the non-modal MIDI monitor / pass-thru window
         self._midi_bridge = None   # the non-modal bidirectional USB MIDI Bridge window
+        self._midi_bridge_wizard = None  # the non-modal USB MIDI Bridge Setup checklist window
         self._device_busy = False  # True while a _DeviceTask transfer runs (bridge pauses)
 
         self.setWindowTitle("LF+ Editor (native)")
@@ -164,6 +165,7 @@ class MainWindow(QMainWindow):
         act = hw.addAction("USB MIDI Bridge…", self.open_midi_bridge)
         act.setToolTip("Bidirectional MIDI over the LF+ USB port. DAW → LF+ commands need the "
                        "device global “Allow MIDI in = YES”.")
+        hw.addAction("USB MIDI Bridge Setup…", self.open_midi_bridge_wizard)
         hw.addSeparator()
         for name in ("Reset Config in LF+", "Reset LF+ to Factory Defaults",
                      "Load Firmware From File…", "Review / Install Latest Firmware…"):
@@ -212,6 +214,15 @@ class MainWindow(QMainWindow):
         self._midi_monitor.show()
         self._midi_monitor.raise_()
         self._midi_monitor.activateWindow()
+
+    def open_midi_bridge_wizard(self):
+        if getattr(self, "_midi_bridge_wizard", None) is None:
+            from .midi_bridge_wizard import MidiBridgeSetupWizard
+            self._midi_bridge_wizard = MidiBridgeSetupWizard(self)
+        self._midi_bridge_wizard.refresh()
+        self._midi_bridge_wizard.show()
+        self._midi_bridge_wizard.raise_()
+        self._midi_bridge_wizard.activateWindow()
 
     def open_midi_bridge(self):
         if getattr(self, "_midi_bridge", None) is None:

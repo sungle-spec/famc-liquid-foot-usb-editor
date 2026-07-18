@@ -197,10 +197,12 @@ connection (hardware-confirmed `C9 → CA → CF` handshake). It temporarily dis
 and opens two virtual ports — **LF+ IN PORT** (computer → LF+: Program/Control Changes plus
 Clock/Start/Continue/Stop, needs the device global **Allow MIDI in = YES**) and **LF+ OUT PORT**
 (LF+ → computer: the controller's own channel MIDI, republished live). On Windows, where
-python-rtmidi can't create virtual ports, pick two distinct existing loopback endpoints instead.
-Stop the bridge (or reconnect the editor) to send `CC` and return the link to normal record
-transfers. Full sequence and filtering details: [docs/DESKTOP_GUIDE.md — Bidirectional MIDI over
-the editor cable](docs/DESKTOP_GUIDE.md#bidirectional-midi-over-the-editor-cable-usb-midi-bridge).
+python-rtmidi can't create virtual ports, install a loopback driver such as loopMIDI, create two
+ports named **LF+ IN PORT** / **LF+ OUT PORT** to match the macOS naming (they're then selected
+automatically), and use **Hardware → USB MIDI Bridge Setup…** for a live checklist that walks
+through it. Stop the bridge (or reconnect the editor) to send `CC` and return the link to normal
+record transfers. Full sequence and filtering details: [docs/DESKTOP_GUIDE.md — Bidirectional
+MIDI over the editor cable](docs/DESKTOP_GUIDE.md#bidirectional-midi-over-the-editor-cable-usb-midi-bridge).
 
 ### Live pedal calibration
 

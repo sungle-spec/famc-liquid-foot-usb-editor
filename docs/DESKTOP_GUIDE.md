@@ -244,7 +244,11 @@ serial link carries MIDI in both directions.
 On macOS/Linux the bridge creates one virtual input/output endpoint pair named **"LF+ IN PORT / LF+ OUT PORT"**.
 Select that device as both a MIDI destination and source in the DAW. python-rtmidi cannot create
 native virtual endpoints on Windows, so create and select **two distinct** loopback ports there
-(one for each direction); using one port for both can create a feedback loop.
+(one for each direction) using a driver such as **loopMIDI** (free); using one port for both can
+create a feedback loop. Name the two ports **"LF+ IN PORT"** and **"LF+ OUT PORT"** to match the
+macOS convention and the editor will select them automatically. **Hardware ▸ USB MIDI Bridge
+Setup…** runs a live checklist (device detected, MIDI endpoints ready, device global "Allow MIDI
+in") and walks through this Windows setup step by step.
 
 * **DAW → LF+:** Program Changes and Control Changes retain the hardware-proven route, allowing
   preset selection and the manual's CC trigger set. The device global **"Allow MIDI in" must be

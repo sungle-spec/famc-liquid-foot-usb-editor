@@ -64,6 +64,17 @@ def wire_bytes(msg) -> bytes | None:
         return None
 
 
+def allow_midi_in_state(dump) -> bool | None:
+    """Whether the loaded dump's device global "Allow MIDI in" is YES, or ``None`` if the
+    dump (or that field) isn't available to check."""
+    if dump is None:
+        return None
+    cfg0 = next((f for f in dump.frames if f.type == 4 and f.rec_num == 0), None)
+    if cfg0 is None or len(cfg0.values) <= 47:
+        return None
+    return cfg0.values[47] != 0
+
+
 def is_identification_reply(data: bytes, model: int = 0x7C) -> bool:
     """Whether ``data`` contains the normal complete LF+ identification reply frame."""
     return any(
@@ -163,12 +174,15 @@ class UsbMidiBridgeDialog(QDialog):
             "For computer-to-LF+ control, enable “Allow MIDI in” in the LF+ Global settings."))
 
         mode = QGridLayout()
+        is_windows = sys.platform.startswith("win")
         self.rb_virtual = QRadioButton(
+            "Create virtual ports (not available on Windows)"
+            if is_windows else
             f"Create virtual ports “{VIRTUAL_INPUT_PORT_NAME}” and "
             f"“{VIRTUAL_OUTPUT_PORT_NAME}”"
         )
         self.rb_existing = QRadioButton("Use existing MIDI endpoints")
-        if sys.platform.startswith("win"):
+        if is_windows:
             self.rb_existing.setChecked(True)
             self.rb_virtual.setEnabled(False)
             self.rb_virtual.setToolTip(
@@ -192,6 +206,20 @@ class UsbMidiBridgeDialog(QDialog):
         refresh.clicked.connect(self.refresh_ports)
         mode.addWidget(refresh, 1, 4)
         root.addLayout(mode)
+
+        if is_windows:
+            win_row = QHBoxLayout()
+            win_hint = QLabel(
+                "Windows needs two existing loopback ports (e.g. created with loopMIDI), "
+                f"ideally named “{VIRTUAL_INPUT_PORT_NAME}” / “{VIRTUAL_OUTPUT_PORT_NAME}” so "
+                "they're picked automatically above."
+            )
+            win_hint.setWordWrap(True)
+            win_row.addWidget(win_hint, 1)
+            setup_btn = QPushButton("Setup…")
+            setup_btn.clicked.connect(self._open_setup_wizard)
+            win_row.addWidget(setup_btn)
+            root.addLayout(win_row)
 
         self.rb_virtual.toggled.connect(self._sync_port_controls)
         self.rb_existing.toggled.connect(self._sync_port_controls)
@@ -232,7 +260,20 @@ class UsbMidiBridgeDialog(QDialog):
         self.in_combo.addItems(self._input_names or ["(no MIDI input ports)"])
         self.out_combo.clear()
         self.out_combo.addItems(self._output_names or ["(no MIDI output ports)"])
+
+        # A loopback pair named to match the macOS virtual-port convention is always the
+        # right default to preselect — Refresh is an explicit user action.
+        in_idx = self.in_combo.findText(VIRTUAL_INPUT_PORT_NAME)
+        if in_idx >= 0:
+            self.in_combo.setCurrentIndex(in_idx)
+        out_idx = self.out_combo.findText(VIRTUAL_OUTPUT_PORT_NAME)
+        if out_idx >= 0:
+            self.out_combo.setCurrentIndex(out_idx)
+
         self._sync_port_controls()
+
+    def _open_setup_wizard(self):
+        self._window.open_midi_bridge_wizard()
 
     def _sync_port_controls(self):
         existing = self.rb_existing.isChecked()
@@ -424,10 +465,7 @@ class UsbMidiBridgeDialog(QDialog):
     def _warn_if_midi_cmds_off(self):
         """Passive check only; never auto-write the device global."""
         dump = getattr(self._window, "dump", None)
-        if dump is None:
-            return
-        cfg0 = next((f for f in dump.frames if f.type == 4 and f.rec_num == 0), None)
-        if cfg0 is not None and len(cfg0.values) > 47 and cfg0.values[47] == 0:
+        if allow_midi_in_state(dump) is False:
             QMessageBox.warning(
                 self,
                 "USB MIDI Bridge",

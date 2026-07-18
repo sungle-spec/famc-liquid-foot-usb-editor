@@ -442,3 +442,80 @@ def test_main_window_shutdown_stops_bridge(qapp):
     window._midi_bridge = bridge
     window.close()
     assert bridge.stopped == 1
+
+
+# ---- recommended-name auto-select + Windows setup affordance ----
+
+def test_refresh_ports_auto_selects_recommended_names(qapp, monkeypatch):
+    monkeypatch.setattr(mido, "get_input_names", lambda: ["Other In", "LF+ IN PORT"])
+    monkeypatch.setattr(mido, "get_output_names", lambda: ["LF+ OUT PORT", "Other Out"])
+    dlg = UsbMidiBridgeDialog(_window())
+    dlg.refresh_ports()
+    assert dlg.in_combo.currentText() == "LF+ IN PORT"
+    assert dlg.out_combo.currentText() == "LF+ OUT PORT"
+
+
+def test_refresh_ports_leaves_selection_when_recommended_names_absent(qapp, monkeypatch):
+    monkeypatch.setattr(mido, "get_input_names", lambda: ["Other In"])
+    monkeypatch.setattr(mido, "get_output_names", lambda: ["Other Out"])
+    dlg = UsbMidiBridgeDialog(_window())
+    dlg.refresh_ports()
+    assert dlg.in_combo.currentText() == "Other In"
+    assert dlg.out_combo.currentText() == "Other Out"
+
+
+def test_windows_radio_is_relabeled_not_just_disabled(qapp, monkeypatch):
+    monkeypatch.setattr(bridge_module.sys, "platform", "win32")
+    dlg = UsbMidiBridgeDialog(_window())
+    assert not dlg.rb_virtual.isEnabled()
+    assert "not available on Windows" in dlg.rb_virtual.text()
+    buttons = [b.text() for b in dlg.findChildren(bridge_module.QPushButton)]
+    assert "Setup…" in buttons
+    dlg.close()
+
+
+def test_windows_setup_button_opens_wizard_via_window(qapp, monkeypatch):
+    monkeypatch.setattr(bridge_module.sys, "platform", "win32")
+    window = _window()
+    opened = []
+    window.open_midi_bridge_wizard = lambda: opened.append(True)
+    dlg = UsbMidiBridgeDialog(window)
+    setup_btn = next(
+        b for b in dlg.findChildren(bridge_module.QPushButton) if b.text() == "Setup…"
+    )
+    setup_btn.click()
+    assert opened
+    dlg.close()
+
+
+def test_macos_radio_keeps_original_label(qapp, monkeypatch):
+    monkeypatch.setattr(bridge_module.sys, "platform", "darwin")
+    dlg = UsbMidiBridgeDialog(_window())
+    assert dlg.rb_virtual.isEnabled()
+    assert "LF+ IN PORT" in dlg.rb_virtual.text()
+    buttons = [b.text() for b in dlg.findChildren(bridge_module.QPushButton)]
+    assert "Setup…" not in buttons
+    dlg.close()
+
+
+# ---- allow_midi_in_state ----
+
+def test_allow_midi_in_state_none_without_dump():
+    assert bridge_module.allow_midi_in_state(None) is None
+
+
+def _dump_with_allow_midi_in(value: int):
+    frame = SimpleNamespace(type=4, rec_num=0, values=[0] * 48)
+    frame.values[47] = value
+    return SimpleNamespace(frames=[frame])
+
+
+def test_allow_midi_in_state_reads_config0_byte47():
+    assert bridge_module.allow_midi_in_state(_dump_with_allow_midi_in(0)) is False
+    assert bridge_module.allow_midi_in_state(_dump_with_allow_midi_in(1)) is True
+
+
+def test_allow_midi_in_state_none_when_field_missing():
+    frame = SimpleNamespace(type=4, rec_num=0, values=[0] * 10)
+    dump = SimpleNamespace(frames=[frame])
+    assert bridge_module.allow_midi_in_state(dump) is None
