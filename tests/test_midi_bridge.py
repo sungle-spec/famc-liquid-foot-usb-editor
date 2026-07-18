@@ -464,6 +464,30 @@ def test_refresh_ports_leaves_selection_when_recommended_names_absent(qapp, monk
     assert dlg.out_combo.currentText() == "Other Out"
 
 
+def test_refresh_ports_auto_selects_despite_windows_winmm_index_suffix(qapp, monkeypatch):
+    # python-rtmidi's WinMM backend appends an enumeration index to every port name
+    # (e.g. "LF+ IN PORT 0"), even for a port literally named "LF+ IN PORT". Matching
+    # must see through that suffix or auto-select silently never fires on Windows.
+    monkeypatch.setattr(
+        mido, "get_input_names", lambda: ["LF+ IN PORT 0", "LF+ OUT PORT 1"]
+    )
+    monkeypatch.setattr(
+        mido, "get_output_names",
+        lambda: ["Microsoft GS Wavetable Synth 0", "LF+ IN PORT 1", "LF+ OUT PORT 2"],
+    )
+    dlg = UsbMidiBridgeDialog(_window())
+    dlg.refresh_ports()
+    assert dlg.in_combo.currentText() == "LF+ IN PORT 0"
+    assert dlg.out_combo.currentText() == "LF+ OUT PORT 2"
+
+
+def test_base_port_name_strips_windows_index_suffix_only():
+    assert bridge_module.base_port_name("LF+ IN PORT 0") == "LF+ IN PORT"
+    assert bridge_module.base_port_name("LF+ IN PORT") == "LF+ IN PORT"
+    assert bridge_module.base_port_name("Some Synth 12") == "Some Synth"
+    assert bridge_module.base_port_name("Weird Port 3a") == "Weird Port 3a"
+
+
 def test_windows_radio_is_relabeled_not_just_disabled(qapp, monkeypatch):
     monkeypatch.setattr(bridge_module.sys, "platform", "win32")
     dlg = UsbMidiBridgeDialog(_window())

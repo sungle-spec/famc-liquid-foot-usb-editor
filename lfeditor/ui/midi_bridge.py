@@ -10,6 +10,7 @@ record transfers and bridge streaming remain mutually exclusive owners of the se
 """
 from __future__ import annotations
 
+import re
 import sys
 import time
 
@@ -37,6 +38,19 @@ except Exception:  # noqa: BLE001
 VIRTUAL_INPUT_PORT_NAME = "LF+ IN PORT"
 VIRTUAL_OUTPUT_PORT_NAME = "LF+ OUT PORT"
 STOP_SETTLE_SECONDS = 0.05
+
+_PORT_INDEX_SUFFIX = re.compile(r" \d+$")
+
+
+def base_port_name(name: str) -> str:
+    """Strip the trailing numeric index some Windows MIDI backends append to every port
+    name — observed with python-rtmidi's WinMM API, which returns e.g. "LF+ IN PORT 0"
+    for a loopback port literally named "LF+ IN PORT" (WinMM doesn't guarantee unique
+    device names, so RtMidi disambiguates by appending the enumeration index to
+    *every* name, not just duplicates). Recommended-name matching must compare against
+    this stripped form or it will never match on Windows.
+    """
+    return _PORT_INDEX_SUFFIX.sub("", name)
 #: Proven CC/PC plus non-destructive transport/clock realtime. Active Sensing and System Reset
 #: remain blocked computer→LF+.
 FORWARD_TYPES = (
@@ -262,11 +276,20 @@ class UsbMidiBridgeDialog(QDialog):
         self.out_combo.addItems(self._output_names or ["(no MIDI output ports)"])
 
         # A loopback pair named to match the macOS virtual-port convention is always the
-        # right default to preselect — Refresh is an explicit user action.
-        in_idx = self.in_combo.findText(VIRTUAL_INPUT_PORT_NAME)
+        # right default to preselect — Refresh is an explicit user action. Match against
+        # base_port_name() since some Windows backends append an index to every name.
+        in_idx = next(
+            (i for i, n in enumerate(self._input_names)
+             if base_port_name(n) == VIRTUAL_INPUT_PORT_NAME),
+            -1,
+        )
         if in_idx >= 0:
             self.in_combo.setCurrentIndex(in_idx)
-        out_idx = self.out_combo.findText(VIRTUAL_OUTPUT_PORT_NAME)
+        out_idx = next(
+            (i for i, n in enumerate(self._output_names)
+             if base_port_name(n) == VIRTUAL_OUTPUT_PORT_NAME),
+            -1,
+        )
         if out_idx >= 0:
             self.out_combo.setCurrentIndex(out_idx)
 

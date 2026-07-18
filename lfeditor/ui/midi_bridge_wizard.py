@@ -20,7 +20,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..comms import find_midi_ports, find_serial_ports
-from .midi_bridge import VIRTUAL_INPUT_PORT_NAME, VIRTUAL_OUTPUT_PORT_NAME, allow_midi_in_state
+from .midi_bridge import (
+    VIRTUAL_INPUT_PORT_NAME,
+    VIRTUAL_OUTPUT_PORT_NAME,
+    allow_midi_in_state,
+    base_port_name,
+)
 from .theme import AMBER, GREEN, RED, TEXT_DIM
 
 LOOPMIDI_URL = "https://www.tobias-erichsen.de/software/loopmidi.html"
@@ -138,7 +143,10 @@ class MidiBridgeSetupWizard(QDialog):
             self.row_endpoints.set(
                 "ok", "Created automatically when the bridge starts — nothing to set up."
             )
-        elif VIRTUAL_INPUT_PORT_NAME in in_names and VIRTUAL_OUTPUT_PORT_NAME in out_names:
+        elif (
+            any(base_port_name(n) == VIRTUAL_INPUT_PORT_NAME for n in in_names)
+            and any(base_port_name(n) == VIRTUAL_OUTPUT_PORT_NAME for n in out_names)
+        ):
             self.row_endpoints.set(
                 "ok", f"“{VIRTUAL_INPUT_PORT_NAME}” / “{VIRTUAL_OUTPUT_PORT_NAME}” detected "
                 "— the bridge will select them automatically."

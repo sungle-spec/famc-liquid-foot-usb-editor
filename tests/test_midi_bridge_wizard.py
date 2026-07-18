@@ -82,6 +82,21 @@ def test_windows_recommended_names_are_ready(qapp, monkeypatch):
     dlg.close()
 
 
+def test_windows_recommended_names_with_winmm_index_suffix_are_ready(qapp, monkeypatch):
+    # Reproduces a real report: loopMIDI ports named exactly "LF+ IN PORT" / "LF+ OUT
+    # PORT" still showed amber, because python-rtmidi's WinMM backend reports them as
+    # "LF+ IN PORT 0" / "LF+ OUT PORT 2" (an index appended to every port name).
+    monkeypatch.setattr(wizard_module.sys, "platform", "win32")
+    _patch_ports(
+        monkeypatch,
+        midi_in=["LF+ IN PORT 0", "LF+ OUT PORT 1"],
+        midi_out=["Microsoft GS Wavetable Synth 0", "LF+ IN PORT 1", "LF+ OUT PORT 2"],
+    )
+    dlg = MidiBridgeSetupWizard(_window())
+    assert "detected" in dlg.row_endpoints.text.text()
+    dlg.close()
+
+
 def test_refresh_reruns_discovery(qapp, monkeypatch):
     monkeypatch.setattr(wizard_module.sys, "platform", "win32")
     _patch_ports(monkeypatch)
