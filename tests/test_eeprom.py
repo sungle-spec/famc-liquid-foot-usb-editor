@@ -44,3 +44,20 @@ def test_wizard_builds():
     assert w.status.text()
     # enable only offered when a 0x87C0 device is present
     assert w.btn_enable.isEnabled() == (w._state.state == ee.NEEDS_ENABLE)
+
+
+def test_wizard_shows_revert_block_reason_inline(monkeypatch):
+    # A disabled button with only a tooltip reads as broken, not intentional — the reason
+    # must also be visible in the body text without hovering.
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from lfeditor.ui import eeprom_wizard as wizard_module
+
+    monkeypatch.setattr(wizard_module.ee, "revert_blocked_reason", lambda: "blocked for testing")
+    w = wizard_module.EepromWizard()
+    assert "Revert: blocked for testing" in w.detail.text()
+    assert not w.btn_revert.isEnabled()
+
+    monkeypatch.setattr(wizard_module.ee, "revert_blocked_reason", lambda: None)
+    w2 = wizard_module.EepromWizard()
+    assert "Revert:" not in w2.detail.text()

@@ -93,9 +93,13 @@ class EepromWizard(QDialog):
             bits.append(f"Detected USB product id: 0x{st.pid:04x}")
         if st.serial_ports:
             bits.append("Serial port: " + ", ".join(st.serial_ports))
+        reason = ee.revert_blocked_reason()
+        if reason:
+            # Surface this inline, not just as a tooltip on the disabled button — a disabled
+            # button with no visible explanation reads as broken, not intentional.
+            bits.append(f"Revert: {reason}")
         self.detail.setText("\n".join(bits))
         self.btn_enable.setEnabled(st.can_enable)
-        reason = ee.revert_blocked_reason()
         self.btn_revert.setEnabled(reason is None and st.state in (ee.READY, ee.ENABLED_NO_PORT))
         self.btn_revert.setToolTip(reason or "Rewrite the EEPROM back to FAMC's 0x87C0")
 
