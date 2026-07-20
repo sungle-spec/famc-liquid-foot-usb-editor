@@ -85,6 +85,9 @@ function wireToolbar() {
   document.getElementById("btn-find").onclick = openFind;
   document.getElementById("btn-qlist").onclick = toggleQlist;
   document.getElementById("btn-raw").onclick = toggleRaw;
+  const midimon = document.getElementById("btn-midimon");
+  if (!MidiMonitor.supported()) { midimon.disabled = true; midimon.title = "Web MIDI needs Chrome/Edge over https (or localhost)"; }
+  midimon.onclick = () => MidiMonitor.open();
   document.getElementById("tools").onchange = (e) => { const v = e.target.value; e.target.value = ""; if (v) runTool(v); };
   // device (WebSerial)
   const conn = document.getElementById("btn-connect");
@@ -236,7 +239,7 @@ function buildRecordHeader(tab) {
 
 // Route the native RecordHeader / Global-tab transfer buttons onto the WebSerial device layer.
 App.transfer = function (kind) {
-  if (kind === "live_cal") { toast("Live expression-pedal calibration is not available in the web build yet."); return; }
+  if (kind === "live_cal") { LiveCal.open(); return; }
   if (typeof Device === "undefined" || !Device.link) { toast("Not connected — click Connect first."); return; }
   if (kind === "to") { deviceWriteCurrent(); return; }
   if (kind === "from" || kind === "all_from") { Device.pull(); return; }

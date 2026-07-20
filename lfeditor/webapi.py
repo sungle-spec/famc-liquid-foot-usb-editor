@@ -315,3 +315,33 @@ class Session:
         """The .syx write frame for one record, to send back to the device (gated in the UI)."""
         frs = self._frames(type_)
         return bytes(frs[idx].to_bytes()) if 0 <= idx < len(frs) else b""
+
+    # ---- live expression-pedal calibration (Hardware/Exp Pedals "Live Calibrate…") ----
+    # Mirrors the desktop's lfeditor/ui/live_pedals.py: the read side (live_view_start_frame,
+    # parse_live_positions) is trivial byte-slicing reimplemented directly in JS to avoid a
+    # Pyodide round-trip on every streamed frame; only the write — which needs the exact
+    # confirmed byte sequence from comms/protocol.write_records_live — goes through Python.
+    def dev_live_view_start_frame(self) -> bytes:
+        from .comms.protocol import live_view_start_frame
+        return live_view_start_frame()
+
+    def dev_set_calibration(self, pedal_index: int, lo: int, hi: int) -> None:
+        """Write the swept min/max for one pedal into Config record #0's calibration block —
+        same offsets the desktop dialog writes (model/expedal.py)."""
+        from .model.expedal import CALIBRATION_MAX_OFF, CALIBRATION_MIN_OFF
+        cfg0 = self._frames(4)[0]
+        v = cfg0.values
+        v[CALIBRATION_MAX_OFF + 2 * pedal_index] = hi & 0xFF
+        v[CALIBRATION_MAX_OFF + 2 * pedal_index + 1] = (hi >> 8) & 0xFF
+        v[CALIBRATION_MIN_OFF + 2 * pedal_index] = lo & 0xFF
+        v[CALIBRATION_MIN_OFF + 2 * pedal_index + 1] = (lo >> 8) & 0xFF
+        self.dirty = True
+
+    def dev_write_live_calibration(self) -> bytes:
+        """The exact byte sequence the original editor sends to save calibration while the live
+        stream is running: a single 0xFF prelude, then both Config record frames back-to-back
+        (record #0 carries the calibration; #1 is written unchanged). No CC/CA around this —
+        see comms/protocol.write_records_live for why."""
+        from .comms.protocol import LIVE_WRITE_PRELUDE
+        frames = self._frames(4)
+        return LIVE_WRITE_PRELUDE + b"".join(bytes(f.to_bytes()) for f in frames)

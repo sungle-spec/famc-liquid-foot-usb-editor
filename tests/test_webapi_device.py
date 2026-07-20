@@ -129,6 +129,40 @@ def test_dev_write_frame_out_of_range_is_empty():
     assert bytes(s.dev_write_frame(1, -1)) == b""
 
 
+# ---- live expression-pedal calibration ----
+
+def test_dev_live_view_start_frame_matches_protocol():
+    from lfeditor.comms.protocol import live_view_start_frame
+    assert bytes(Session().dev_live_view_start_frame()) == live_view_start_frame()
+
+
+def test_dev_set_calibration_writes_the_right_offsets():
+    from lfeditor.model.expedal import CALIBRATION_MAX_OFF, CALIBRATION_MIN_OFF
+    s = _loaded_session()
+    s.dirty = False
+    s.dev_set_calibration(2, lo=100, hi=900)
+    v = s._frames(4)[0].values
+    assert v[CALIBRATION_MAX_OFF + 4] == 900 & 0xFF
+    assert v[CALIBRATION_MAX_OFF + 5] == (900 >> 8) & 0xFF
+    assert v[CALIBRATION_MIN_OFF + 4] == 100 & 0xFF
+    assert v[CALIBRATION_MIN_OFF + 5] == (100 >> 8) & 0xFF
+    assert s.dirty
+
+
+def test_dev_write_live_calibration_is_prelude_plus_both_config_frames():
+    from lfeditor.comms.protocol import LIVE_WRITE_PRELUDE
+    s = _loaded_session()
+    s.dev_set_calibration(0, lo=50, hi=1000)
+    got = bytes(s.dev_write_live_calibration())
+    frames = s._frames(4)
+    expected = LIVE_WRITE_PRELUDE + b"".join(bytes(f.to_bytes()) for f in frames)
+    assert got == expected
+    assert got[:1] == LIVE_WRITE_PRELUDE
+    # each record frame inside is well-formed sysex
+    body = got[1:]
+    assert body.count(b"\xf7") == len(frames)
+
+
 # ---- the per-record path: Song/Setlist/IASwitch, confirmed on hardware 2026-07-15 ----
 
 def test_dev_per_record_cmds_matches_the_confirmed_command_table():

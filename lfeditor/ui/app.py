@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import os
+import shutil
+from datetime import datetime
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, QSettings, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QToolBar, QFileDialog, QMessageBox, QLabel, QWidget,
@@ -51,10 +53,13 @@ class MainWindow(QMainWindow):
         self._midi_bridge = None   # the non-modal bidirectional USB MIDI Bridge window
         self._midi_bridge_wizard = None  # the non-modal USB MIDI Bridge Setup checklist window
         self._device_busy = False  # True while a _DeviceTask transfer runs (bridge pauses)
+        self._settings = QSettings("FAMC", "LFPlusEditor")
 
         self.setWindowTitle("LF+ Editor (native)")
-        self.resize(1320, 860)
         self.setMinimumSize(1024, 680)
+        geo = self._settings.value("geometry")
+        if geo is None or not self.restoreGeometry(geo):
+            self.resize(1320, 860)
         self._build_toolbar()
 
         self.tabs = QTabWidget()
@@ -104,6 +109,8 @@ class MainWindow(QMainWindow):
         # ---- File ----
         filem = bar.addMenu("File")
         filem.addAction("Open…", self.open_file)
+        self.recent_menu = filem.addMenu("Open Recent")
+        self._rebuild_recent_menu()
         filem.addAction("Save", self.save_file)
         filem.addAction("Backup (Save As)…", self.save_as)
         filem.addSeparator()
@@ -680,6 +687,7 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Open LF+ backup", start, "Sysex (*.syx)")
         if path:
             self.load(path)
+            self._add_recent_file(path)
 
     def load(self, path: str):
         try:
@@ -702,13 +710,44 @@ class MainWindow(QMainWindow):
         )
         self._update_title()
 
-    def _confirm_discard(self) -> bool:
-        """Return True if it's OK to replace the open document (no unsaved changes, or user OK)."""
+    # --- recent files (QSettings-backed) ---
+    def _recent_files(self) -> list[str]:
+        paths = self._settings.value("recentFiles", [])
+        if isinstance(paths, str):  # a single leftover value can come back as a bare string
+            paths = [paths]
+        return [p for p in paths if os.path.exists(p)]
+
+    def _add_recent_file(self, path: str):
+        path = os.path.abspath(path)
+        paths = [p for p in self._recent_files() if p != path]
+        paths.insert(0, path)
+        self._settings.setValue("recentFiles", paths[:10])
+        self._rebuild_recent_menu()
+
+    def _rebuild_recent_menu(self):
+        self.recent_menu.clear()
+        paths = self._recent_files()
+        if not paths:
+            act = self.recent_menu.addAction("(no recent files)")
+            act.setEnabled(False)
+            return
+        for path in paths:
+            # Deliberately just self.load(p), no re-add/reorder here: _add_recent_file() would
+            # call _rebuild_recent_menu() from inside this very action's triggered handler,
+            # clearing (and deleting) the QAction currently executing it.
+            act = self.recent_menu.addAction(os.path.basename(path), lambda _=False, p=path: self.load(p))
+            act.setToolTip(path)
+
+    def _confirm_discard(self, verb: str = "replace") -> bool:
+        """Return True if it's OK to replace/close the open document (no unsaved changes, or
+        user OK). `verb` customizes the prompt wording ("replace" for loading over it, "quit"
+        for closing the window)."""
         if not self._dirty:
             return True
+        phrase = "Replace it anyway?" if verb == "replace" else f"{verb.capitalize()} anyway?"
         return QMessageBox.question(
             self, "Discard changes?",
-            "The open document has unsaved changes. Replace it anyway?",
+            f"The open document has unsaved changes. {phrase}",
             QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) == QMessageBox.Yes
 
     def load_factory(self, filename: str, label: str):
@@ -928,9 +967,25 @@ class MainWindow(QMainWindow):
             return
         if not self.path:
             return self.save_as()
+        self._backup_before_overwrite(self.path)
         self.dump.to_file(self.path)
         self._dirty = False
         self._update_title()
+
+    def _backup_before_overwrite(self, path: str, backup_dir: str | None = None):
+        """Best-effort timestamped copy of `path` before an in-place Save overwrites it —
+        mirrors the EEPROM wizard's backup-before-write convention (comms/eeprom.py). Never
+        blocks the save: a backup-folder problem shouldn't stop a routine document save, unlike
+        a hardware write."""
+        if not os.path.exists(path):
+            return
+        backup_dir = backup_dir or os.path.expanduser("~/Documents/FAMC/Syx_Backups")
+        try:
+            os.makedirs(backup_dir, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            shutil.copy2(path, os.path.join(backup_dir, f"{os.path.basename(path)}.{stamp}.bak"))
+        except OSError:
+            pass
 
     def save_as(self):
         if not self.dump:
@@ -942,6 +997,7 @@ class MainWindow(QMainWindow):
             self.path = path
             self._dirty = False
             self._update_title()
+            self._add_recent_file(path)
 
     # --- dirty tracking ---
     def mark_dirty(self):
@@ -954,6 +1010,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"LF+ Editor (native, emulates v6.31) — {name} {star}")
 
     def closeEvent(self, event):
+        if not self._confirm_discard(verb="quit"):
+            event.ignore()
+            return
+        self._settings.setValue("geometry", self.saveGeometry())
         bridge = getattr(self, "_midi_bridge", None)
         if bridge is not None:
             bridge.stop()              # sends CC before releasing bridge-owned serial

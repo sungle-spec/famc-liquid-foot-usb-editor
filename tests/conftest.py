@@ -38,6 +38,10 @@ def _destroy_leaked_widgets():
     if app is None:
         return
     for w in list(app.topLevelWidgets()):
+        # Forced test-cleanup close, not a real user quit — never let it block on the
+        # unsaved-changes confirm dialog MainWindow.closeEvent() shows for a dirty document.
+        if hasattr(w, "_dirty"):
+            w._dirty = False
         w.close()
         w.deleteLater()
     app.processEvents()   # run the deferred-delete queue so the widgets are actually freed

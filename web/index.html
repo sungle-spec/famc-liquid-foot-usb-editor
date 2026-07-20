@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LF+ Editor (web)</title>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <div id="toolbar">
@@ -21,6 +21,8 @@
     <button class="tbtn" id="btn-find" disabled>Find…</button>
     <button class="tbtn" id="btn-qlist" disabled title="Show/hide the searchable record list">Q-LIST</button>
     <button class="tbtn" id="btn-raw" disabled title="Show/hide the raw bytes of this record">Raw</button>
+    <span class="tbsep"></span>
+    <button class="tbtn" id="btn-midimon" title="Monitor any OS MIDI port, with optional pass-thru — independent of the LF+ connection">MIDI Monitor…</button>
     <span class="tbsep"></span>
     <select class="tbtn" id="tools" disabled title="CSV, reports, bulk tools">
       <option value="">Tools…</option>
@@ -74,8 +76,10 @@
 
   <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"
           onerror="document.getElementById('overlay-msg').textContent='Could not load Pyodide from the CDN — check your network connection and reload.'"></script>
-  <script src="render.js?v=8"></script>
-  <script src="serial.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="render.js?v=9"></script>
+  <script src="serial.js?v=9"></script>
+  <script src="midimonitor.js?v=9"></script>
+  <script src="livecal.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

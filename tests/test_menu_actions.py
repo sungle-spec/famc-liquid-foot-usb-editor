@@ -22,8 +22,19 @@ def qapp():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.fixture(autouse=True)
+def isolated_qsettings(monkeypatch, tmp_path):
+    """Every MainWindow() in this file must use a throwaway settings file, not the real
+    per-user QSettings store — otherwise running the suite writes real geometry/recent-files
+    into the developer's/CI's actual OS-level preferences."""
+    from PySide6.QtCore import QSettings
+    import lfeditor.ui.app as app_module
+    ini = str(tmp_path / "settings.ini")
+    monkeypatch.setattr(app_module, "QSettings", lambda *a, **k: QSettings(ini, QSettings.IniFormat))
+
+
 @pytest.fixture()
-def win(qapp):
+def win(qapp, isolated_qsettings):
     from lfeditor.ui.app import MainWindow
     w = MainWindow()
     w.load(RJM)
@@ -104,3 +115,74 @@ def test_csv_export_import_report_via_menus(win, monkeypatch, tmp_path):
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: (rep, "")))
     win.save_report("songs", "Song")
     assert os.path.exists(rep) and "Assigned" in open(rep).readline()
+
+
+# ---- quit guard / geometry persistence / recent files / auto-backup ----
+
+def test_close_event_blocked_when_dirty_and_cancelled(win, monkeypatch):
+    from PySide6.QtGui import QCloseEvent
+    win._dirty = True
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Cancel))
+    ev = QCloseEvent()
+    win.closeEvent(ev)
+    assert not ev.isAccepted()
+
+
+def test_close_event_proceeds_and_saves_geometry_when_confirmed(win, monkeypatch):
+    from PySide6.QtGui import QCloseEvent
+    win._dirty = True
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    ev = QCloseEvent()
+    win.closeEvent(ev)
+    assert ev.isAccepted()
+    assert win._settings.value("geometry") is not None
+
+
+def test_close_event_proceeds_without_prompt_when_not_dirty(win):
+    from PySide6.QtGui import QCloseEvent
+    win._dirty = False
+    ev = QCloseEvent()
+    win.closeEvent(ev)  # no QMessageBox stub installed — would raise if it tried to show one
+    assert ev.isAccepted()
+
+
+def test_open_file_adds_to_recent_menu(win, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (RJM, "")))
+    win.open_file()
+    labels = [a.text() for a in win.recent_menu.actions()]
+    assert os.path.basename(RJM) in labels
+
+
+def test_recent_files_prunes_missing_path(win, tmp_path):
+    ghost = str(tmp_path / "does_not_exist.syx")
+    win._settings.setValue("recentFiles", [ghost])
+    win._rebuild_recent_menu()
+    labels = [a.text() for a in win.recent_menu.actions()]
+    assert os.path.basename(ghost) not in labels
+    assert "(no recent files)" in labels
+
+
+def test_save_file_in_place_creates_backup_copy(win, tmp_path):
+    target = tmp_path / "backup_target.syx"
+    win.dump.to_file(str(target))
+    original = target.read_bytes()
+    win.path = str(target)
+
+    backup_dir = tmp_path / "Syx_Backups"
+    win._backup_before_overwrite(str(target), backup_dir=str(backup_dir))
+
+    copies = list(backup_dir.glob(f"{target.name}.*.bak"))
+    assert len(copies) == 1
+    assert copies[0].read_bytes() == original
+
+
+def test_save_file_calls_backup_before_overwrite(win, tmp_path, monkeypatch):
+    target = tmp_path / "save_target.syx"
+    win.dump.to_file(str(target))
+    win.path = str(target)
+
+    calls = []
+    monkeypatch.setattr(win, "_backup_before_overwrite", lambda path, backup_dir=None: calls.append(path))
+    win.save_file()
+    assert calls == [str(target)]
