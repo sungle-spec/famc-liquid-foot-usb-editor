@@ -88,8 +88,9 @@ byte-for-byte; only changed records change):
   PC# auto-increment), **Re-order Records (Save/Sync)** (move a preset/song; references follow), and
   **MIDI Monitor / Pass-Thru**.
 - **Hardware → Device Connection Setup** — the FTDI-EEPROM wizard that exposes the device's serial
-  port on macOS (one-time; see [Getting started §4](docs/GETTING_STARTED.md#4-connect-your-lf-macos-one-time-setup)
-  and the [illustrated walkthrough](docs/DESKTOP_GUIDE.md#first-time-setup-make-the-device-appear-as-a-serial-port)).
+  port on macOS (one-time; see [Getting started §4](docs/GETTING_STARTED.md#4-connect-your-lf-macos-one-time-setup),
+  the [illustrated walkthrough](docs/DESKTOP_GUIDE.md#first-time-setup-make-the-device-appear-as-a-serial-port),
+  and [what it does / prerequisites / gotchas](docs/EEPROM_SWITCH.md)).
 - **Hardware → USB MIDI Bridge** — starts the hardware-confirmed `C9 → CA → CF` live mode and
   exposes **LF+ IN PORT / LF+ OUT PORT** as a bidirectional virtual MIDI device on macOS/Linux. It preserves the
   proven DAW→LF+ CC/PC filter and republishes parsed LF+ channel MIDI to the computer; Windows

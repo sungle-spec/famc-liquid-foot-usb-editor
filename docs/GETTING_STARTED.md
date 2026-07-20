@@ -95,7 +95,8 @@ driver picks it up — the editor automates this:
 
 Step-by-step with screenshots: **[DESKTOP_GUIDE.md — first-time setup](DESKTOP_GUIDE.md#first-time-setup-make-the-device-appear-as-a-serial-port)**.
 Windows/Linux devices that already show a serial port skip straight to Connect. In the web editor,
-click **Connect** and pick the port in the browser prompt ([details](WEBSERIAL.md)).
+click **Connect** and pick the port in the browser prompt ([details](WEBSERIAL.md)). What the
+wizard actually does under the hood, and what to expect: **[EEPROM_SWITCH.md](EEPROM_SWITCH.md)**.
 
 ## 5. Next steps
 

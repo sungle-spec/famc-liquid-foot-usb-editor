@@ -211,11 +211,14 @@ format the original editor used (its old exports import here too). Edit in any s
 **Hardware → Device Connection Setup…** runs the connection wizard. The LF+ ships with a
 custom USB identity that most systems have no driver for; the wizard rewrites the FTDI EEPROM
 product-ID to the standard one so a serial port appears. It backs up the EEPROM first, and the
-change is reversible (revert works on Windows/Linux; macOS blocks it because the system driver
-claims the port — the wizard explains this). One-time job per device.
+change is reversible on any OS (Revert flips the ID back to FAMC's `0x87C0`). One-time job per
+device.
 
 OS notes: **Windows** needs the FTDI VCP driver (usually already present); **Linux** users
 must be in the `dialout` group; **macOS** works out of the box.
+
+Prerequisites, what happens step by step, and issues to watch for (re-enumeration delay after a
+write, EEPROM backup location, and more): **[EEPROM_SWITCH.md](EEPROM_SWITCH.md)**.
 
 ### Connect, pull, push
 

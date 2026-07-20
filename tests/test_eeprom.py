@@ -1,6 +1,5 @@
 """Tests for the FTDI EEPROM driver-setup module + wizard (no hardware required)."""
 import os
-import platform
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 
@@ -20,13 +19,15 @@ def test_constants():
     assert ee.PID_OFFSET == 0x04
 
 
-@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS-only revert guard")
-def test_revert_blocked_on_macos():
-    assert ee.revert_blocked_reason() is not None
-    # revert write must refuse early (before any hardware access) on macOS
-    res = ee.set_product_id(ee.SERIAL_PID, ee.FAMC_CUSTOM_PID, "/tmp/lf_eeprom_test",
-                            allow_write=True)
-    assert res.ok is False and "macOS" in res.message
+def test_no_platform_gate_on_revert():
+    # Enable and Revert must go through the identical write path on every OS - there is no
+    # platform-specific pre-check left in set_product_id() (the old macOS block was an
+    # untested assumption; real hardware testing during the original protocol-cracking work
+    # showed Revert works fine on macOS, so both directions now behave the same everywhere).
+    assert not hasattr(ee, "revert_blocked_reason")
+    import inspect
+    src = inspect.getsource(ee.set_product_id)
+    assert "platform" not in src
 
 
 def test_write_refused_without_allow_write_or_device():
@@ -46,18 +47,24 @@ def test_wizard_builds():
     assert w.btn_enable.isEnabled() == (w._state.state == ee.NEEDS_ENABLE)
 
 
-def test_wizard_shows_revert_block_reason_inline(monkeypatch):
-    # A disabled button with only a tooltip reads as broken, not intentional — the reason
-    # must also be visible in the body text without hovering.
+def test_wizard_revert_enabled_purely_by_device_state(monkeypatch):
+    # Revert availability now depends only on whether the device is in a revertible state
+    # (READY / ENABLED_NO_PORT) — no platform special-casing, on macOS or anywhere else.
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
     from lfeditor.ui import eeprom_wizard as wizard_module
 
-    monkeypatch.setattr(wizard_module.ee, "revert_blocked_reason", lambda: "blocked for testing")
+    ready_state = wizard_module.ee.DeviceState(
+        wizard_module.ee.READY, "Ready", pid=wizard_module.ee.SERIAL_PID,
+        serial_ports=["/dev/cu.usbserial-TEST"],
+    )
+    monkeypatch.setattr(wizard_module.ee, "detect_state", lambda: ready_state)
     w = wizard_module.EepromWizard()
-    assert "Revert: blocked for testing" in w.detail.text()
-    assert not w.btn_revert.isEnabled()
+    assert w.btn_revert.isEnabled()
 
-    monkeypatch.setattr(wizard_module.ee, "revert_blocked_reason", lambda: None)
+    needs_enable_state = wizard_module.ee.DeviceState(
+        wizard_module.ee.NEEDS_ENABLE, "Needs enable", pid=wizard_module.ee.FAMC_CUSTOM_PID,
+    )
+    monkeypatch.setattr(wizard_module.ee, "detect_state", lambda: needs_enable_state)
     w2 = wizard_module.EepromWizard()
-    assert "Revert:" not in w2.detail.text()
+    assert not w2.btn_revert.isEnabled()

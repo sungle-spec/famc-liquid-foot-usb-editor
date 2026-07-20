@@ -15,16 +15,20 @@ This module powers the "Device Connection Setup" wizard:
 All heavy deps (pyusb/libusb, pyftdi) are imported lazily so the editor runs without them; a
 missing libusb backend is reported as a normal state, not a crash.
 
-**Platform note on Revert:** writing the EEPROM needs raw USB access via libusb. At `0x87C0` no OS
-driver owns the chip, so Enable works everywhere. At `0x6015`, macOS's FTDI DriverKit dext claims
-the interface and libusb can't open it — so Revert is reliable on Linux/Windows but blocked on
-macOS unless the driver is unbound. `revert_blocked_reason()` returns a message for the UI.
+Both directions go through the same `set_product_id()` write path on every OS — Revert
+(`0x6015 → 0x87C0`) was hand-verified against real hardware on macOS during the original
+protocol-cracking work (raw pyftdi write to the standard PID succeeded with no driver-claim
+error). An earlier version of this module pre-emptively blocked Revert on macOS based on how
+Apple's DriverKit FTDI driver was assumed to behave, without testing it against real hardware —
+that assumption was wrong and has been removed. If the port is genuinely held open by something
+else (e.g. the editor's own active Connect session), the write attempt itself fails with a
+specific error and the pre-write backup is untouched — that failure mode was always correct; it
+just shouldn't be predicted in advance for a whole OS.
 """
 from __future__ import annotations
 
 import datetime as _dt
 import os
-import platform
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -98,25 +102,21 @@ def detect_state() -> DeviceState:
     return DeviceState(NO_DEVICE, _STATE_TEXT[NO_DEVICE])
 
 
-def revert_blocked_reason() -> Optional[str]:
-    """Why Revert (0x6015 → 0x87C0) can't run here, or None if it can."""
-    if platform.system() == "Darwin":
-        return ("On macOS the system FTDI driver owns the device at PID 0x6015, so the EEPROM "
-                "can't be rewritten back to 0x87C0 from here. Revert from a Linux/Windows machine, "
-                "or unbind the driver first.")
-    return None
-
-
 def _open_eeprom(pid: int):
     """Open an FtdiEeprom for the device currently enumerated at `pid` (registers the custom PID
     so pyftdi will recognise it). Caller must close()."""
     from pyftdi.ftdi import Ftdi
     from pyftdi.eeprom import FtdiEeprom
+    from pyftdi.usbtools import UsbTools
     # teach pyftdi about FAMC's non-standard product id so it can open/decode it
     try:
         Ftdi.add_custom_product(FTDI_VID, FAMC_CUSTOM_PID, "LF+")
     except ValueError:
         pass  # already registered
+    # pyftdi caches its device list; without flushing, a device that changed PID earlier in
+    # this same process (Enable/Revert just ran) won't be found at its new PID until the cache
+    # is invalidated — found via real hardware testing (a fresh process always saw it fine).
+    UsbTools.flush_cache()
     eeprom = FtdiEeprom()
     eeprom.open(f"ftdi://0x{FTDI_VID:04x}:0x{pid:04x}/1")
     return eeprom
@@ -153,13 +153,19 @@ def set_product_id(current_pid: int, new_pid: int, backup_dir: str,
 
     Always backs up the EEPROM image first. The real write is refused unless `allow_write=True`
     (the wizard sets this only after an explicit user confirmation). `dry_run` validates and logs
-    without committing. pyftdi's commit() recomputes the EEPROM CRC and verifies the read-back,
-    raising on mismatch — so a failed write is reported, not silently wrong.
+    without committing.
+
+    Uses pyftdi's own `set_property()` (not direct byte manipulation of `_eeprom`) so any
+    mirrored-sector duplication pyftdi's EEPROM layout requires is handled correctly — a raw
+    byte poke of just `PID_OFFSET` was found (via real hardware testing) to sometimes leave the
+    device unchanged despite `commit()` reporting no error.
+
+    `commit(dry_run=...)` returns the `dry_run` flag itself, not "something changed" — for a
+    real write (`dry_run=False`) it always returns `False` on success, raising instead on
+    failure (read-back mismatch). So success here means "no exception was raised", not a truthy
+    return value; treating the return value as a success flag was a real bug that reported a
+    misleading "no change" error on writes that had in fact already succeeded.
     """
-    if platform.system() == "Darwin" and new_pid == FAMC_CUSTOM_PID:
-        reason = revert_blocked_reason()
-        if reason:
-            return WriteResult(False, reason, old_pid=current_pid, new_pid=new_pid)
     # 1) always capture a recovery backup first
     try:
         backup = backup_eeprom(current_pid, backup_dir)
@@ -169,16 +175,12 @@ def set_product_id(current_pid: int, new_pid: int, backup_dir: str,
     if not allow_write:
         return WriteResult(False, "Write not authorised (allow_write is off). Backup saved.",
                            backup_path=backup, old_pid=current_pid, new_pid=new_pid)
-    # 2) modify just the product-id word and commit (CRC + verify handled by pyftdi)
+    # 2) modify just the product-id property and commit (CRC + read-back verify handled by
+    # pyftdi; commit() raises FtdiEepromError on a verification mismatch)
     eeprom = _open_eeprom(current_pid)
     try:
-        if not hasattr(eeprom, "_eeprom") or not hasattr(eeprom, "_dirty"):
-            return WriteResult(False, "Unexpected pyftdi version (EEPROM internals changed).",
-                               backup_path=backup, old_pid=current_pid, new_pid=new_pid)
-        eeprom._eeprom[PID_OFFSET] = new_pid & 0xFF
-        eeprom._eeprom[PID_OFFSET + 1] = (new_pid >> 8) & 0xFF
-        eeprom._dirty.add("product_id")     # force CRC recompute + the modified flag
-        changed = eeprom.commit(dry_run=dry_run)
+        eeprom.set_property("product_id", new_pid)
+        eeprom.commit(dry_run=dry_run)
     except Exception as exc:  # noqa: BLE001
         return WriteResult(False, f"EEPROM write failed: {exc}. Your backup is at {backup}.",
                            backup_path=backup, old_pid=current_pid, new_pid=new_pid)
@@ -186,9 +188,6 @@ def set_product_id(current_pid: int, new_pid: int, backup_dir: str,
         eeprom.close()
     if dry_run:
         return WriteResult(True, f"Dry run OK — would set PID 0x{new_pid:04x}. Backup at {backup}.",
-                           backup_path=backup, old_pid=current_pid, new_pid=new_pid)
-    if not changed:
-        return WriteResult(False, "EEPROM reported no change (already at that PID?).",
                            backup_path=backup, old_pid=current_pid, new_pid=new_pid)
     return WriteResult(True, f"PID set to 0x{new_pid:04x}. Unplug and re-plug the device to "
                        f"finish. Backup saved to {backup}.",

@@ -23,10 +23,10 @@ Router (a separate, private reverse-engineering project); only the **MODEL byte 
    The editor automates this via **Hardware → Device Connection Setup…** (`lfeditor/comms/eeprom.py`
    + `ui/eeprom_wizard.py`): it detects the current state, saves a full EEPROM backup, then flips
    the PID word at EEPROM offset `0x04` (pyftdi `commit()` recomputes the CRC and verifies the
-   read-back). **Enable** (`0x87C0 → 0x6015`) works on any OS because no driver owns the chip at
-   `0x87C0`. **Revert** (`0x6015 → 0x87C0`) is reliable on Linux/Windows but **blocked on macOS**,
-   where the FTDI DriverKit dext claims the `0x6015` device and libusb can't open it (the wizard
-   disables Revert there and explains why). Needs `libusb` (`brew install libusb`) for USB access.
+   read-back). Both **Enable** (`0x87C0 → 0x6015`) and **Revert** (`0x6015 → 0x87C0`) go through
+   the same write path on every OS, including macOS — hand-verified against real hardware during
+   the original protocol-cracking work. Needs `libusb` (`brew install libusb`) for USB access.
+   Full details, prerequisites, and gotchas: [EEPROM_SWITCH.md](EEPROM_SWITCH.md).
 2. Talk to that port at **230400 baud, 8N1, DTR+RTS asserted**.
 3. Send the **handshake** `F0 00 00 7C 0F 0F C9 00 00 00 00 F7` (device enters *Editor Mode*,
    front panel: "Editor Mode [sel] to exit", replies `F0 05 00 7C …`), then the **session-begin**
