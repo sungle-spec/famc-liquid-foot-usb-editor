@@ -244,6 +244,17 @@ class MainWindow(QMainWindow):
         for w in self.tab_widgets:
             w.set_dump(self.dump)
 
+    def refresh_channel_names(self):
+        """Call after a live MIDI-channel-name edit on the Midi/Groups tab: other tabs' MIDI
+        command/channel pickers (Presets, Songs, IA-Slot, Exp Pedals) cache Config#1's channel
+        names at the last set_dump(), so without this a rename wouldn't show up until reload."""
+        if self.dump is None:
+            return
+        for w in self.tab_widgets:
+            refresh = getattr(w, "refresh_context", None)
+            if refresh is not None:
+                refresh(self.dump)
+
     def _refresh_after_bulk_edit(self):
         """Re-bind every tab after a bulk edit (quick-prog / re-order) changed many records."""
         if self.dump is None:

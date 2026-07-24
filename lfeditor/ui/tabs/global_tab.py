@@ -118,10 +118,15 @@ class GlobalTab(QWidget):
             panel.setToolTip(sec_tip)
         return panel
 
-    def set_dump(self, dump) -> None:
-        self._records = dump.records(self.type_)
+    def refresh_context(self, dump) -> None:
+        """See SectionedTab.refresh_context — same channel-name-cache-refresh need applies here
+        (the Exp Pedals tab's "Chan" picker is a ChannelNameField)."""
         for f in self._all_fields:
             f.set_context(dump)
+
+    def set_dump(self, dump) -> None:
+        self._records = dump.records(self.type_)
+        self.refresh_context(dump)
         for sec, fields in self._sections:
             idx = sec.record if sec.record < len(self._records) else 0
             if idx < len(self._records):

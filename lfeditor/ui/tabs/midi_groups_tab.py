@@ -200,6 +200,7 @@ class MidiGroupsTab(QWidget):
         if new != self._cfg1.values[off:off + NAME_STRIDE]:
             self._cfg1.values[off:off + NAME_STRIDE] = new
             self._mark()
+            self.window().refresh_channel_names()
 
     def _write_maxpre(self, ch: int):
         if self._cfg0 is None:

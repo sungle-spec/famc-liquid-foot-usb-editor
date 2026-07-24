@@ -182,9 +182,16 @@ class SectionedTab(QWidget):
                 f"Applied toggle to {changed} record(s)", 4000)
 
     # --- data ---
-    def set_dump(self, dump) -> None:
+    def refresh_context(self, dump) -> None:
+        """Re-resolve context-dependent field data (e.g. Config#1 channel names shown in MIDI
+        command pickers) without touching the current record selection. Fields like
+        CommandTableField/ChannelNameField cache their display strings at set_context() time, so
+        a rename made live on another tab (Midi/Groups) needs this to be visible immediately."""
         for f in self._all_fields:
             f.set_context(dump)
+
+    def set_dump(self, dump) -> None:
+        self.refresh_context(dump)
         self._records = dump.records(self.type_)
         self.rail.set_records(self._records)
         self.header.set_count(len(self._records))
