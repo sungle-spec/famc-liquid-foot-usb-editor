@@ -131,10 +131,10 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   use **Hardware → To LF+** to push the cleared labels to the device.
 - **Hardware** — **Device Connection Setup…** (the EEPROM wizard — see
   [docs/EEPROM_SWITCH.md](docs/EEPROM_SWITCH.md) for what it does and what to expect),
-  Connect/Disconnect, From LF+, To LF+, **USB MIDI Bridge…** (see below). *Reset Config / Reset
+  Connect/Disconnect, Get All from LF+, Send Edits to LF+, Send All to LF+, **USB MIDI Bridge…** (see below). *Reset Config / Reset
   to Factory / Load Firmware* are shown but disabled in this build (device-side resets and
   firmware flashing aren't enabled yet).
-- **Complete Transfers** — Get-everything-from / Send-all-edits-to the device.
+- **Complete Transfers** — Get All from LF+ / **Send All to LF+** (writes every record in the open file, so a `.syx` backup can be restored).
 - **Settings** — **Show raw bytes** toggles the raw-decoded-values table on every tab (off by
   default).
 

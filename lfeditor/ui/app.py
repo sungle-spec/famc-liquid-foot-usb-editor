@@ -166,8 +166,9 @@ class MainWindow(QMainWindow):
         hw.addAction("Device Connection Setup…", self.open_eeprom_wizard)
         hw.addSeparator()
         hw.addAction("Connect / Disconnect", self.toggle_connect)
-        hw.addAction("From LF+ (read all)", self.pull_from_device)
-        hw.addAction("To LF+ (write edits)", self.push_to_device)
+        hw.addAction("Get All from LF+", self.pull_from_device)
+        hw.addAction("Send Edits to LF+", self.push_to_device)
+        hw.addAction("Send All to LF+", self.push_all_to_device)
         hw.addSeparator()
         act = hw.addAction("USB MIDI Bridge…", self.open_midi_bridge)
         act.setToolTip("Bidirectional MIDI over the LF+ USB port. DAW → LF+ commands need the "
@@ -188,8 +189,10 @@ class MainWindow(QMainWindow):
 
         # ---- Complete Transfers ----
         ct = bar.addMenu("Complete Transfers")
-        ct.addAction("Get Everything from LF+", self.pull_from_device)
-        ct.addAction("Send All Edits to LF+", self.push_to_device)
+        ct.addAction("Get All from LF+", self.pull_from_device)
+        act = ct.addAction("Send All to LF+", self.push_all_to_device)
+        act.setToolTip("Write every record in the open file to the device — restores a .syx backup.")
+        ct.setToolTipsVisible(True)
 
         # ---- Settings ----
         setm = bar.addMenu("Settings")
@@ -324,14 +327,22 @@ class MainWindow(QMainWindow):
         self.act_connect = QAction("Connect", self)
         self.act_connect.triggered.connect(self.toggle_connect)
         tb.addAction(self.act_connect)
-        self.act_from = QAction("From LF+", self)
+        self.act_from = QAction("Get All from LF+", self)
+        self.act_from.setToolTip("Read everything from the device into the open file")
         self.act_from.triggered.connect(self.pull_from_device)
         self.act_from.setEnabled(False)
         tb.addAction(self.act_from)
-        self.act_to = QAction("To LF+", self)
+        self.act_to = QAction("Send Edits to LF+", self)
+        self.act_to.setToolTip("Write only the records you've changed since the last Open or Get All")
         self.act_to.triggered.connect(self.push_to_device)
         self.act_to.setEnabled(False)
         tb.addAction(self.act_to)
+        self.act_to_all = QAction("Send All to LF+", self)
+        self.act_to_all.setToolTip("Write every record in the open file to the device "
+                                   "(restores a .syx backup)")
+        self.act_to_all.triggered.connect(self.push_all_to_device)
+        self.act_to_all.setEnabled(False)
+        tb.addAction(self.act_to_all)
 
     # --- device session (all device I/O runs on a worker thread) ---
     def _writable_types(self):
@@ -400,7 +411,9 @@ class MainWindow(QMainWindow):
         self._device_busy = busy   # also prevents bridge startup during a record transfer
         self.act_connect.setEnabled(not busy)
         self.act_from.setEnabled(not busy and self.transport is not None)
-        self.act_to.setEnabled(not busy and self.transport is not None and self.dump is not None)
+        can_send = not busy and self.transport is not None and self.dump is not None
+        self.act_to.setEnabled(can_send)
+        self.act_to_all.setEnabled(can_send)
         if busy:
             self._set_conn(msg, AMBER)   # amber = working
 
@@ -488,6 +501,7 @@ class MainWindow(QMainWindow):
             self.act_connect.setText("Disconnect")
             self.act_from.setEnabled(True)
             self.act_to.setEnabled(self.dump is not None)
+            self.act_to_all.setEnabled(self.dump is not None)
             self._set_conn(f"connected — {os.path.basename(port)} (Editor Mode)", ACCENT)
 
         self._run_device(work, ok, f"connecting to {os.path.basename(port)}…", "Connect failed")
@@ -500,6 +514,7 @@ class MainWindow(QMainWindow):
         self.act_connect.setText("Connect")
         self.act_from.setEnabled(False)
         self.act_to.setEnabled(False)
+        self.act_to_all.setEnabled(False)
         self._set_conn("not connected", RED)
 
     def pull_from_device(self):
@@ -566,6 +581,35 @@ class MainWindow(QMainWindow):
             return
 
         frames = list(changed)
+        self._run_device(lambda: self._send_all(frames), self._finish_write,
+                         f"writing {len(frames)} record(s)…", "To LF+ failed")
+
+    def push_all_to_device(self):
+        """Write EVERY USB-writable record in the open file to the device (e.g. restore a .syx
+        backup), edited or not — unlike push_to_device, which sends only changed records."""
+        from collections import Counter
+        from ..codec.frame import TYPE_NAMES
+        if self.dump is None:
+            return
+        if self.transport is None:
+            QMessageBox.information(self, "Not connected",
+                                   "Connect to the Liquid Foot+ first (Connect in the toolbar).")
+            return
+        writable = self._writable_types()
+        frames = [f for f in self.dump.frames if f.type in writable]
+        if not frames:
+            QMessageBox.information(self, "To LF+", "The open file has no USB-writable records.")
+            return
+        by_type = Counter(TYPE_NAMES.get(f.type, f"type{f.type}") for f in frames)
+        summary = ", ".join(f"{n}× {t}" for t, n in by_type.items())
+        if QMessageBox.question(
+            self, "Send everything to the device?",
+            f"Write ALL {len(frames)} record(s) in this file to the Liquid Foot+?\n\n{summary}\n\n"
+            "This overwrites the matching records on the device, edited or not. Each write is "
+            "acknowledged by the device, and Songs/Set-Lists/IA-Slots are read back and compared. "
+            "Don't unplug the device until it finishes.",
+        ) != QMessageBox.Yes:
+            return
         self._run_device(lambda: self._send_all(frames), self._finish_write,
                          f"writing {len(frames)} record(s)…", "To LF+ failed")
 
@@ -713,6 +757,7 @@ class MainWindow(QMainWindow):
         self._snapshot_baseline()  # edits are tracked relative to the freshly-loaded file
         if self.transport is not None:
             self.act_to.setEnabled(True)
+            self.act_to_all.setEnabled(True)
         c = self.dump.counts()
         self.status.setText(
             f"{os.path.basename(path)}  —  "

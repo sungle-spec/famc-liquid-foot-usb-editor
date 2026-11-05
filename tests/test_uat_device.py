@@ -220,6 +220,33 @@ def test_failed_write_stays_pending(qapp, _silence_dialogs):
     assert "not confirmed" in _silence_dialogs.get("warning", "")
 
 
+def test_push_all_sends_every_writable_record_edited_or_not(qapp, _silence_dialogs, monkeypatch):
+    from lfeditor.comms import protocol
+    t = FakeTransport(ack=True)
+    w = _win(qapp, t)
+    # a healthy device echoes back what was written for the readback-verified per-record types
+    by_key = {(f.type, f.rec_num): f for f in w.dump.frames}
+    monkeypatch.setattr(protocol, "pull_one_record_per_record",
+                        lambda transport, type_, rec_num, model: by_key.get((type_, rec_num)))
+    writable = w._writable_types()
+    expected = [fr.to_bytes() for fr in w.dump.frames if fr.type in writable]
+    assert w._changed_writable() == []          # nothing edited — the old path would send nothing
+    w.push_all_to_device()
+    assert len(t.sent) >= len(expected)
+    for b in expected:
+        assert b in t.sent, "a record from the file was not restored to the device"
+    assert "all acknowledged" in _silence_dialogs.get("information", "")
+
+
+def test_push_all_without_device_sends_nothing(qapp, _silence_dialogs):
+    t = FakeTransport(ack=True)
+    w = _win(qapp, t)
+    w.transport = None
+    w.push_all_to_device()
+    assert t.sent == []
+    assert "Connect" in _silence_dialogs.get("information", "")
+
+
 # ---- per-record / per-type header transfers ------------------------------------------------
 
 def test_transfer_to_sends_single_record(qapp):

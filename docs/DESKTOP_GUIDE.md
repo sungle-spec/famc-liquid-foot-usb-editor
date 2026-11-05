@@ -81,9 +81,9 @@ it, or drop an **IA-Slot** onto a command-table row to write an "IA ON Trig" com
 | **File** | Open… · Save · Backup (Save As)… · Load Factory Defaults into Editor ▸ (Mini / JR+ / 12/12+ / Pro+) · Load Special Factory Programming ▸ (Axe-Fx II Basic / Axe-Fx III Basic / Kemper / Kemper Performance) · Import from CSV ▸ / Export to CSV ▸ (Presets · Songs · Set-Lists · Sysex) · About / License |
 | **Edit** | Copy · Paste · Find… · Clear Current Record… · Clear Preset Labels… · Clear Preset MAP Labels… · Clear Song Preset Labels… |
 | **Utilities** | Quick Repeated Command Programmer… · Re-order Records (Save / Sync)… · MIDI Monitor / Pass-Thru… |
-| **Hardware** | Device Connection Setup… (EEPROM wizard) · Connect / Disconnect · From LF+ (read all) · To LF+ (write edits) · *(Reset Config / Reset to Factory / Load Firmware are visible but disabled — device resets and firmware flashing are deliberately not enabled)* |
+| **Hardware** | Device Connection Setup… (EEPROM wizard) · Connect / Disconnect · Get All from LF+ · Send Edits to LF+ · Send All to LF+ · *(Reset Config / Reset to Factory / Load Firmware are visible but disabled — device resets and firmware flashing are deliberately not enabled)* |
 | **Reports** | Preset report… · Song report… · Set-List report… — human-readable CSV summaries with references resolved to names |
-| **Complete Transfers** | Get Everything from LF+ · Send All Edits to LF+ |
+| **Complete Transfers** | Get All from LF+ · Send All to LF+ (writes every record in the open file — restores a `.syx` backup) |
 | **Settings** | Show raw bytes · Q-LIST |
 | **Help** | About / License |
 
@@ -235,7 +235,7 @@ write, EEPROM backup location, and more): **[EEPROM_SWITCH.md](EEPROM_SWITCH.md)
 4. **Disconnect** — tells the unit to leave Editor Mode and closes the port cleanly. Avoid
    rapid reconnect cycles.
 
-**Complete Transfers** menu = the same pull/push, phrased as "get everything / send all edits".
+The toolbar and Hardware menu have three transfer buttons. **Get All from LF+** reads everything from the device into the open file. **Send Edits to LF+** writes only the records you changed. **Send All to LF+** writes *every* record in the open file, edited or not, so you can open a `.syx` backup and restore the whole unit. (The per-tab To / From / All To / All From LF+ buttons still move one record or one type at a time.) Complete Transfers ▸ Get All / Send All are the same actions.
 
 ### Bidirectional MIDI over the editor cable (USB MIDI Bridge)
 
