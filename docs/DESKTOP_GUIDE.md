@@ -83,7 +83,7 @@ it, or drop an **IA-Slot** onto a command-table row to write an "IA ON Trig" com
 | **Utilities** | Quick Repeated Command Programmer… · Re-order Records (Save / Sync)… · MIDI Monitor / Pass-Thru… |
 | **Hardware** | Device Connection Setup… (EEPROM wizard) · Connect / Disconnect · Get All from LF+ · Send Edits to LF+ · Send All to LF+ · *(Reset Config / Reset to Factory / Load Firmware are visible but disabled — device resets and firmware flashing are deliberately not enabled)* |
 | **Reports** | Preset report… · Song report… · Set-List report… — human-readable CSV summaries with references resolved to names |
-| **Complete Transfers** | Get All from LF+ · Send All to LF+ (writes every record in the open file — restores a `.syx` backup) |
+| **Complete Transfers** | Get All from LF+ · Send Edits to LF+ (only changed records) · Send All to LF+ (writes every record in the open file — restores a `.syx` backup) |
 | **Settings** | Show raw bytes · Q-LIST |
 | **Help** | About / License |
 
@@ -235,7 +235,9 @@ write, EEPROM backup location, and more): **[EEPROM_SWITCH.md](EEPROM_SWITCH.md)
 4. **Disconnect** — tells the unit to leave Editor Mode and closes the port cleanly. Avoid
    rapid reconnect cycles.
 
-The toolbar and Hardware menu have three transfer buttons. **Get All from LF+** reads everything from the device into the open file. **Send Edits to LF+** writes only the records you changed. **Send All to LF+** writes *every* record in the open file, edited or not, so you can open a `.syx` backup and restore the whole unit. (The per-tab To / From / All To / All From LF+ buttons still move one record or one type at a time.) Complete Transfers ▸ Get All / Send All are the same actions.
+The toolbar and Hardware menu have three transfer buttons. **Get All from LF+** reads everything from the device into the open file. **Send Edits to LF+** writes only the records you changed. **Send All to LF+** writes *every* record in the open file, edited or not, so you can open a `.syx` backup and restore the whole unit. (The per-tab To / From / All To / All From LF+ buttons still move one record or one type at a time.) Complete Transfers ▸ Get All / Send Edits / Send All are the same three actions.
+
+**Progress on long transfers.** While records are being sent (a full restore can be 2,000+ records and take many minutes) the status bar shows a progress bar and a live line such as *Sending 123 of 2,346 (5%) · Song #5 · 1:23 elapsed · ~18:40 left*. The time-left estimate appears after a few records. Don't unplug the device until it finishes.
 
 ### Bidirectional MIDI over the editor cable (USB MIDI Bridge)
 

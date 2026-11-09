@@ -135,7 +135,7 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   to Factory / Load Firmware* are shown but disabled in this build (device-side resets and
   firmware flashing aren't enabled yet — the protocol is known but not yet confirmed on hardware;
   for firmware use the separate [Firmware Loader](docs/FIRMWARE_LOADER.md)).
-- **Complete Transfers** — Get All from LF+ / **Send All to LF+** (writes every record in the open file, so a `.syx` backup can be restored).
+- **Complete Transfers** — Get All from LF+ / **Send Edits to LF+** (only the records you changed) / **Send All to LF+** (writes every record in the open file, so a `.syx` backup can be restored). Long sends show a progress bar plus *Sending N of M (p%) · record · elapsed · ~time left* in the status bar.
 - **Settings** — **Show raw bytes** toggles the raw-decoded-values table on every tab (off by
   default).
 

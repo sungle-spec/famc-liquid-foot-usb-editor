@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QThread, QSettings, Signal
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QToolBar, QFileDialog, QMessageBox, QLabel, QWidget,
+    QProgressBar,
 )
 
 from ..codec import Dump
@@ -22,6 +23,7 @@ class _DeviceTask(QThread):
     ok = Signal(object)
     err = Signal(str)
     progress = Signal(str)   # only used when the caller opts in (see MainWindow._run_device)
+    steps = Signal(str, int, int, str)   # (verb, done, total, current) for a determinate progress bar
 
     def __init__(self, fn, parent=None):
         super().__init__(parent)
@@ -32,6 +34,20 @@ class _DeviceTask(QThread):
             self.ok.emit(self._fn())
         except Exception as exc:  # noqa: BLE001
             self.err.emit(str(exc))
+
+class _Emitter:
+    """What a `wants_progress` worker receives: call it with a message (status text), or call
+    `.steps(verb, done, total, current)` to drive the status-bar progress bar + ETA."""
+
+    def __init__(self, task: "_DeviceTask"):
+        self._task = task
+
+    def __call__(self, msg: str) -> None:
+        self._task.progress.emit(msg)
+
+    def steps(self, verb: str, done: int, total: int, current: str = "") -> None:
+        self._task.steps.emit(verb, done, total, current)
+
 
 # Tab order matches the original editor (two rows there; one bar here).
 TAB_ORDER = [
@@ -85,6 +101,14 @@ class MainWindow(QMainWindow):
         self.status = QLabel("No file loaded")
         self.status.setObjectName("status")
         self.statusBar().addWidget(self.status)
+        # Progress bar for long device transfers (hidden until a device task runs).
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(220)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        self._busy_started = 0.0
+        self._status_before = ""
+        self.statusBar().addWidget(self.progress_bar)
         self.conn = QLabel()
         self.statusBar().addPermanentWidget(self.conn)
         self._set_conn("not connected", RED)
@@ -189,9 +213,12 @@ class MainWindow(QMainWindow):
 
         # ---- Complete Transfers ----
         ct = bar.addMenu("Complete Transfers")
-        ct.addAction("Get All from LF+", self.pull_from_device)
-        act = ct.addAction("Send All to LF+", self.push_all_to_device)
-        act.setToolTip("Write every record in the open file to the device — restores a .syx backup.")
+        ct.addAction("Get All from LF+", self.pull_from_device).setToolTip(
+            "Read everything from the device into the open file.")
+        ct.addAction("Send Edits to LF+", self.push_to_device).setToolTip(
+            "Write only the records you've changed since the last Open or Get All.")
+        ct.addAction("Send All to LF+", self.push_all_to_device).setToolTip(
+            "Write every record in the open file to the device — restores a .syx backup.")
         ct.setToolTipsVisible(True)
 
         # ---- Settings ----
@@ -360,8 +387,11 @@ class MainWindow(QMainWindow):
         return ({rt for rt, _ in FOOT_READ_CMDS.values()}
                 | {rt for rt, _ in FOOT_PER_RECORD_CMDS.values()})
 
-    def _send_all(self, frames):
+    def _send_all(self, frames, progress=None):
         """Write every frame in `frames` to the device; return (written, failed) frame lists.
+
+        `progress` (optional) is the worker's emitter; when it has `.steps`, it is called after each
+        record so the status bar shows "Sending N of M · ETA" — a 2,000-record restore takes minutes.
 
         Per-record types (Song/Setlist/IASwitch — see PER_RECORD_CMD_FOR_TYPE) get an extra
         readback-and-compare check: their write-frame format was inferred from the decompiled
@@ -371,8 +401,13 @@ class MainWindow(QMainWindow):
         silently reporting success on an unconfirmed write."""
         from ..comms import send_record
         from ..comms.protocol import MODEL_FOOT, PER_RECORD_CMD_FOR_TYPE, pull_one_record_per_record
+        from ..codec.frame import TYPE_NAMES
         written, failed = [], []
-        for f in frames:
+        steps = getattr(progress, "steps", None)
+        total = len(frames)
+        for i, f in enumerate(frames):
+            if steps is not None:
+                steps("Sending", i, total, f"{TYPE_NAMES.get(f.type, f'type{f.type}')} #{f.rec_num + 1}")
             if f.type in PER_RECORD_CMD_FOR_TYPE:
                 def verify(f=f):
                     back = pull_one_record_per_record(self.transport, f.type, f.rec_num, MODEL_FOOT)
@@ -381,6 +416,8 @@ class MainWindow(QMainWindow):
             else:
                 ok = send_record(self.transport, f, allow_write=True)
             (written if ok else failed).append(f)
+        if steps is not None:
+            steps("Sending", total, total, "")
         return written, failed
 
     def _commit_baseline(self, frames):
@@ -408,7 +445,18 @@ class MainWindow(QMainWindow):
         self.conn.setStyleSheet(f"color: {color}; padding-right: 10px;")
 
     def _set_busy(self, busy: bool, msg: str = ""):
+        import time
+        was_busy = getattr(self, "_device_busy", False)
         self._device_busy = busy   # also prevents bridge startup during a record transfer
+        if busy and not was_busy:
+            self._busy_started = time.monotonic()
+            self._status_before = self.status.text()
+            self.progress_bar.setRange(0, 0)       # indeterminate until the first progress step
+            self.progress_bar.setVisible(True)
+        elif not busy:
+            self.progress_bar.setVisible(False)
+            if was_busy:
+                self.status.setText(self._status_before)
         self.act_connect.setEnabled(not busy)
         self.act_from.setEnabled(not busy and self.transport is not None)
         can_send = not busy and self.transport is not None and self.dump is not None
@@ -427,9 +475,10 @@ class MainWindow(QMainWindow):
         turned out to be exactly this."""
         self._set_busy(True, busy_msg)
         task = self._task = _DeviceTask(None, self)
-        task._fn = (lambda: fn(task.progress.emit)) if wants_progress else fn
+        task._fn = (lambda: fn(_Emitter(task))) if wants_progress else fn
         if wants_progress:
             task.progress.connect(lambda msg: self._set_conn(msg, AMBER))
+            task.steps.connect(self._on_transfer_steps)
 
         def done(result):
             self._set_busy(False)
@@ -443,6 +492,15 @@ class MainWindow(QMainWindow):
         task.ok.connect(done)
         task.err.connect(failed)
         task.start()
+
+    def _on_transfer_steps(self, verb: str, done: int, total: int, current: str):
+        """Status-bar progress for a long transfer: bar + "Sending N of M (p%) · record · ETA"."""
+        import time
+        from ..progress import progress_text
+        self.progress_bar.setRange(0, max(1, total))
+        self.progress_bar.setValue(done)
+        self.status.setText(progress_text(verb, done, total,
+                                          time.monotonic() - self._busy_started, current))
 
     def _refresh_conn_label(self):
         if self.transport is not None:
@@ -523,6 +581,8 @@ class MainWindow(QMainWindow):
         from ..comms.protocol import FOOT_PER_RECORD_CMDS
         from ..codec.frame import TYPE_NAMES
         if self.transport is None:
+            QMessageBox.information(self, "Not connected",
+                                   "Connect to the Liquid Foot+ first (Connect in the toolbar).")
             return
         read_types = self._read_types()
 
@@ -563,7 +623,11 @@ class MainWindow(QMainWindow):
     def push_to_device(self):
         """Write every record the user edited since the last load/read (gated, ACK-verified)."""
         from ..codec.frame import TYPE_NAMES
-        if self.transport is None or self.dump is None:
+        if self.dump is None:
+            return
+        if self.transport is None:
+            QMessageBox.information(self, "Not connected",
+                                   "Connect to the Liquid Foot+ first (Connect in the toolbar).")
             return
         changed = self._changed_writable()
         if not changed:
@@ -581,8 +645,8 @@ class MainWindow(QMainWindow):
             return
 
         frames = list(changed)
-        self._run_device(lambda: self._send_all(frames), self._finish_write,
-                         f"writing {len(frames)} record(s)…", "To LF+ failed")
+        self._run_device(lambda emit: self._send_all(frames, emit), self._finish_write,
+                         f"writing {len(frames)} record(s)…", "To LF+ failed", wants_progress=True)
 
     def push_all_to_device(self):
         """Write EVERY USB-writable record in the open file to the device (e.g. restore a .syx
@@ -610,8 +674,8 @@ class MainWindow(QMainWindow):
             "Don't unplug the device until it finishes.",
         ) != QMessageBox.Yes:
             return
-        self._run_device(lambda: self._send_all(frames), self._finish_write,
-                         f"writing {len(frames)} record(s)…", "To LF+ failed")
+        self._run_device(lambda emit: self._send_all(frames, emit), self._finish_write,
+                         f"writing {len(frames)} record(s)…", "To LF+ failed", wants_progress=True)
 
     def open_live_calibration(self):
         """Open the live expression-pedal calibration view (treadle bars + Save Calibration)."""
@@ -673,9 +737,9 @@ class MainWindow(QMainWindow):
         ) != QMessageBox.Yes:
             return
 
-        self._run_device(lambda: self._send_all(frames),
+        self._run_device(lambda emit: self._send_all(frames, emit),
                          lambda result: self._finish_write(result, f"{tname} record(s)"),
-                         f"writing {len(frames)} {tname}…", "To LF+ failed")
+                         f"writing {len(frames)} {tname}…", "To LF+ failed", wants_progress=True)
 
     def _read_back(self, type_: int, index: int, kind: str):
         """Pull `type_` from the device and overlay it ('from' = just the index-th record,
