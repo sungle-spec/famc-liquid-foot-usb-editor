@@ -66,3 +66,25 @@ Findings are in [ORIGINAL_EDITOR_GAP_ANALYSIS.md](ORIGINAL_EDITOR_GAP_ANALYSIS.m
 - **Firmware:** PIC18 image; `python -m lffirmware --image X.syx --decode out.bin`, then Ghidra language
   `PIC-18:LE:24:PIC-18` (format in [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md)).
 - **Windows build:** `brew install innoextract`, `innoextract -d <empty dir> setup.exe`.
+
+## Using REA to verify our own builds (2026-11-09)
+
+REA is mainly an RE tool, but a few commands double as independent checks of the rebuild. What was
+run, what it showed, and the pitfalls (REA CLI 6.8.0 via `npx -y rea-agents@latest`):
+
+| Check | Command | Result |
+|---|---|---|
+| **Web editor end-to-end** | `capture-browser-scenario scenario.json` (real Chromium from Playwright's cache) | Loaded the Axe-Fx III template, opened *IA-Slot*, switched *Sync device* to Kemper; REA's own captured DOM showed *Sync effect* with 18 options incl. `TUNER` and the preserved `(unknown: 165)` — an independent confirmation of the sync-effect feature |
+| **Release-to-release JS diff** | `analyze-javascript-application` on v0.0.14 and current `web/`, then `compare-application-versions` (both Evidence objects inline) | 2 assets changed (`app.js`, `render.js` — the files edited), 0 added/removed. **19 items `unknown`**: REA's graph of a plain web app is incomplete, so this is a weak guard against accidental deletions |
+| **CLI regression** | `capture-process` of `lffirmware --dry-run` on the real v6.32 12+ image, old vs new loader, then `compare-process-captures` | Same exit 0, verdict `KNOWN GOOD`, hash and `Ready` line; the only terminal change is the new `header :` line. REA also flagged `exit: changed` from settlement timing (119 vs 129 ms, 2 vs 1 frames) — not a behaviour change |
+| Native UI of the original editor | `capture-native-ui-scenario` | **Not run**: needs an existing PID + window ID, and access to the original app was declined |
+| Reconstruction ledger / coverage | `build-reconstruction-obligation-ledger`, `evaluate-reconstruction-coverage` | Not tried: JSON-workflow inputs aimed at JavaScript applications |
+
+Pitfalls:
+- **Browser scenarios:** `select_option`/`fill` take `"value": {"source":"literal","value":"…"}`; there is
+  no `validate-browser-scenario` in 6.8.0 (it exists in newer docs). `select >> nth=N` and
+  `.tab:has-text("…")` locators work. Serve the app first (`web/devserver.py`).
+- **Process capture:** `python -I` ignores the current directory (the capture then fails with exit 1);
+  both scenarios you compare must share the same `working_directory` — select old vs new code inside the
+  command instead (e.g. `sys.path.insert` in a `-c` script).
+- **Evidence size:** `analyze-javascript-application` output is ~20 MB per app; keep it out of the repo.
