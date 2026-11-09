@@ -1153,8 +1153,8 @@ def _selftest() -> int:
     try:
         from ..resources import FACTORY_DEFAULTS, factory_path
         app = QApplication.instance() or QApplication([])
-        from .theme import build_stylesheet
-        app.setStyleSheet(build_stylesheet())
+        from .theme import apply_style
+        apply_style(app)
         win = MainWindow()
         win.load(factory_path(FACTORY_DEFAULTS[0][1]))   # bundled, always present
         assert win.dump is not None, "factory file did not load"
@@ -1176,8 +1176,8 @@ def main():
     if "--selftest" in sys.argv[1:]:
         raise SystemExit(_selftest())
     app = QApplication.instance() or QApplication([])
-    from .theme import build_stylesheet
-    app.setStyleSheet(build_stylesheet())
+    from .theme import apply_style
+    apply_style(app)
     win = MainWindow()
     # Convenience: auto-load a dump if its path is passed or the sample exists.
     sample = os.path.join(os.path.dirname(__file__), "..", "..",

@@ -178,3 +178,23 @@ def build_stylesheet() -> str:
         return QSS + extra
     except Exception:  # noqa: BLE001
         return QSS
+
+
+def style_name_for(platform: str) -> str | None:
+    """Qt style to force on this platform, or None to keep the native one.
+
+    Qt >= 6.7 defaults to the "windows11" style on Windows, whose menus are translucent rounded
+    layered popups. Combined with our QSS the popup can be overpainted by the toolbar buttons
+    beneath it (reported: the Complete Transfers dropdown not drawing above Copy/Paste/Find).
+    Fusion is QSS-friendly and draws opaque popups. macOS/Linux are left alone.
+    """
+    return "Fusion" if platform == "win32" else None
+
+
+def apply_style(app) -> None:
+    """Set the platform style (if any) then the stylesheet. Call once, right after QApplication()."""
+    import sys
+    name = style_name_for(sys.platform)
+    if name:
+        app.setStyle(name)
+    app.setStyleSheet(build_stylesheet())

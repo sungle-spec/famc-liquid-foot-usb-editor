@@ -136,6 +136,12 @@ builders added. Remaining, in value order:
 4. **Custom firmware** — technically possible (no signature, 16-bit sum only) but brick-risk and
    untested; see §5g. Not recommended before a bricked-unit volunteer validates the loader path.
 
+**Windows menu overpaint (tester report, 2026-11-09).** On Windows the *Complete Transfers* popup was
+overpainted by the Copy/Paste/Find toolbar buttons (the other menus were fine; not reproducible on
+macOS). Likely cause: Qt >= 6.7's default "windows11" style draws translucent layered popups. Fix:
+force Fusion on `win32` only (`lfeditor/ui/theme.py: apply_style`). **Unverified on Windows** — the
+tester's build also predates the Send Edits restore, so confirm on a fresh build from `main`.
+
 ## 5. REA/disassembly findings (2026-11-09)
 
 ### 5a. Every sysex frame the original builds (`scripts/extract_original_frames.py`)

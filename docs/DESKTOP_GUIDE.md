@@ -300,6 +300,10 @@ works with any ports, not just the LF+.
 - **About / License** (File or Help menu) — version, the MIT license, and the legal & safety
   notes.
 - **Nothing phones home.** The app has no network features at all; device I/O is the USB cable.
+- **Menus on Windows** (e.g. Complete Transfers) are drawn with Qt's *Fusion* style, not the
+  Windows 11 default: the default's translucent popups could be overpainted by the toolbar
+  buttons below them. macOS and Linux keep their native style. If a menu still draws behind the
+  toolbar, report your Windows version, display scaling % and whether the Q-LIST panel is floating.
 - **Unsaved changes** are marked with `•` in the title and guarded by a confirm on
   load-over/quit.
 - **Troubleshooting**: no serial port → run the Device Connection Setup wizard (and check the
