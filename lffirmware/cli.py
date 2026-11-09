@@ -34,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--allow-unverified", action="store_true",
                     help="allow an image that is not in the known-good hash list")
     ap.add_argument("--log-dir", help="where to write the session log")
+    ap.add_argument("--decode", metavar="OUT.bin",
+                    help="read-only: decode --image to a raw PIC18 program-memory image (little-"
+                         "endian, for a disassembler such as Ghidra's PIC-18 module) and exit")
     ap.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
@@ -44,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
         ports = list_ports()
         print("\n".join(ports) if ports else "no MIDI output ports found")
         return 0
+
+    if args.decode:
+        if not args.image:
+            ap.error("--decode needs --image")
+        return _decode(args.image, args.decode)
 
     if not args.image or not args.model:
         ap.error("--image and --model are required (or use --list-ports)")
@@ -103,18 +111,34 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _decode(image: str, out: str) -> int:
+    from . import codec
+    try:
+        with open(image, "rb") as fh:
+            img = codec.decode(fh.read())
+    except (OSError, codec.FirmwareFormatError) as exc:
+        print(f"cannot decode: {exc}")
+        return 2
+    with open(out, "wb") as fh:
+        fh.write(img.memory)
+    print(f"v{img.version} for LF+ {img.model or '?'}: {len(img.memory):,} bytes "
+          f"({img.blocks} x {codec.BLOCK_BYTES}) -> {out}; checksum "
+          f"{'OK' if img.checksum_ok else 'MISMATCH'}, length {'OK' if img.length_ok else 'MISMATCH'}")
+    return 0 if img.checksum_ok and img.length_ok else 2
+
+
 def _selftest() -> int:
     """Frozen-bundle gate for CI: exercise validation + the refusal logic, no MIDI I/O."""
     import tempfile
 
-    from .images import HEADER
+    from . import codec
     from .known_images import KNOWN_IMAGES
 
     assert len(KNOWN_IMAGES) >= 200, "known-images table missing from bundle"
     with tempfile.TemporaryDirectory() as d:
         fake = f"{d}/LF+12+_FIRM.syx"
         with open(fake, "wb") as f:
-            f.write(HEADER + bytes([0x01, 0x00, 0x00, 0x03]) + bytes(4096) + b"\xf7")
+            f.write(codec.encode(bytes(range(256)) * 16, 6, 99, "K"))
         rep = validate_image(fake)
         assert rep.is_plausible and not rep.is_known_good and rep.filename_model == "12+"
         assert main(["--image", fake, "--model", "12+", "--dry-run"]) == 2          # no override

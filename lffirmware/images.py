@@ -12,6 +12,7 @@ import hashlib
 import pathlib
 from dataclasses import dataclass, field
 
+from . import codec
 from .known_images import KNOWN_IMAGES
 
 MODELS = ("Mini", "12", "12+", "JR+", "Pro+")
@@ -39,21 +40,31 @@ class ImageReport:
     known_model: str | None = None  # from the SHA-256 allowlist
     known_version: str | None = None
     filename_model: str | None = None  # from FAMC's LF+<MODEL>_FIRM naming
+    # Decoded from the image itself (lffirmware.codec) — authoritative, unlike the filename.
+    header_model: str | None = None    # model letter in the header (F/J/K/L/H -> Mini/12/12+/JR+/Pro+)
+    version: str | None = None         # "6.32", from the header
+    structure_ok: bool = False         # header parses AND length == blocks*128 AND checksum matches
     errors: list[str] = field(default_factory=list)
 
     @property
     def is_known_good(self) -> bool:
-        return self.frame_ok and self.data_bytes_ok and self.known_model is not None
+        return (self.frame_ok and self.data_bytes_ok and self.structure_ok
+                and self.known_model is not None)
 
     @property
     def is_plausible(self) -> bool:
-        """Structurally valid but not in the allowlist — needs an explicit user override."""
-        return self.frame_ok and self.data_bytes_ok and self.nibble_fraction > 0.99
+        """Structurally valid (incl. its own length field and checksum) but not in the allowlist —
+        needs an explicit user override."""
+        return (self.frame_ok and self.data_bytes_ok and self.nibble_fraction > 0.99
+                and self.structure_ok)
 
     def model_for(self, selected_model: str) -> bool:
-        """Does this image match the model the user selected?"""
+        """Does this image match the model the user selected? Known hash first, then the model
+        letter inside the image, and only then the (user-editable) filename."""
         if self.known_model is not None:
             return self.known_model == selected_model
+        if self.header_model is not None:
+            return self.header_model == selected_model
         return self.filename_model == selected_model
 
 
@@ -100,6 +111,29 @@ def validate_image(path: str | pathlib.Path) -> ImageReport:
         if rep.nibble_fraction <= 0.99:
             rep.errors.append("payload is not nibble-encoded like genuine LF+ firmware")
 
+    # Verify the image's own header, length field and checksum (format recovered 2026-11-09).
+    try:
+        img = codec.decode(data)
+    except codec.FirmwareFormatError as exc:
+        rep.errors.append(f"firmware structure invalid: {exc}")
+    else:
+        rep.header_model, rep.version = img.model, img.version
+        if img.model is None:
+            rep.errors.append(f"unknown model letter {img.model_letter!r} in the firmware header")
+        if not img.length_ok:
+            rep.errors.append(
+                f"header says {img.blocks * codec.BLOCK_BYTES:,} image bytes but the payload "
+                f"holds {len(img.memory):,} — truncated or corrupt")
+        if not img.checksum_ok:
+            rep.errors.append(
+                f"payload checksum mismatch (file says {img.trailer:#06x}, computed "
+                f"{img.computed_checksum:#06x}) — corrupt or tampered image")
+        rep.structure_ok = img.model is not None and img.length_ok and img.checksum_ok
+        if rep.filename_model and img.model and rep.filename_model != img.model:
+            rep.errors.append(
+                f"filename says {rep.filename_model} but the image header says {img.model} — "
+                f"trust the header, not the name")
+
     known = KNOWN_IMAGES.get(rep.sha256)
     if known:
         rep.known_model, rep.known_version, _size = known
@@ -125,6 +159,9 @@ def describe(rep: ImageReport) -> str:
             lines.append(f"filename suggests model: {rep.filename_model}")
     else:
         lines.append("identity: NOT a valid LF+ firmware image")
+    if rep.version or rep.header_model:
+        lines.append(f"header  : firmware v{rep.version or '?'} for LF+ {rep.header_model or '?'}"
+                     f"; length + checksum {'OK' if rep.structure_ok else 'NOT OK'}")
     for e in rep.errors:
         lines.append(f"problem : {e}")
     return "\n".join(lines)

@@ -22,6 +22,11 @@ itself has always kept *Load Firmware* disabled. This standalone tool exists for
   against the 241 known FAMC firmware releases** (v3.34 → v6.32, all five models). File *size
   cannot* identify the model (sizes collide across models between versions), so hash identity is
   the safety net; unknown files need an explicit override.
+- **Checks the image's own structure** (2026-11-09): the header, the block-count length field and
+  the 16-bit payload checksum must all agree, or the image is refused even with `--allow-unverified`
+  (a truncated or corrupted download can no longer be flashed). The model letter and version are
+  read from the header and shown in the report; a filename that contradicts the header is flagged
+  and the header wins. See [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#decoded-format-lffirmwarecodecpy).
 - Refuses model mismatches: the image's verified identity must match the model **you** select.
   Wrong-model firmware can permanently damage a unit.
 - Sends the image the way the original editor did: **one sysex message over MIDI** (the device's
@@ -81,7 +86,8 @@ python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --dry-run     # verify 
 python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --port "USB MIDI Interface"
 ```
 
-`--dry-run` performs every check and shows exactly what a real run would send — safe anywhere,
+`--decode OUT.bin` (read-only) writes the image as raw little-endian PIC18 program memory for a
+disassembler. `--dry-run` performs every check and shows exactly what a real run would send — safe anywhere,
 no MIDI I/O. `--allow-unverified` is required for images not in the known-hash list.
 
 ## Tester protocol

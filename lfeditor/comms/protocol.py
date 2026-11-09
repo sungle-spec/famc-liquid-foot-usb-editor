@@ -48,6 +48,19 @@ USB_MIDI_STREAM_START_CTRL = 0xCF
 USB_MIDI_STREAM_STOP_CTRL = 0xCC
 EXIT_CTRL = USB_MIDI_STREAM_STOP_CTRL  # compatibility name for ordinary editor disconnect
 LIVE_VIEW_CTRL = 0xD2   # start expression-pedal positions (also stopped by context-sensitive CC)
+# Control/command bytes found 2026-11-09 by static analysis of the ORIGINAL v6.31 Mac editor
+# (docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md section 5; `scripts/extract_original_frames.py`). Unlike the
+# bytes above these were NOT confirmed on hardware, and several are destructive — the builders
+# below only construct frames; nothing in the app sends them.
+THRU_MODE_START_CTRL = 0xCB   # Window1.MIDI_Start_MIDI_THRU_MODE  (CB; cf. CF below — see docs)
+SIMULATOR_START_CTRL = 0xCF   # Window1.MIDI_START_SIMULATOR_MODE (same byte as USB-MIDI stream start)
+RESET_CONFIG_CTRL = 0xD0      # Window1.MIDI_FORCE_CONFIG_RESET: "Reset Config in LF+"  (DESTRUCTIVE)
+RESET_FACTORY_CTRL = 0xD1     # Window1.MIDI_FORCE_ALL_RESET: "Reset LF+ to Factory Defaults" (DESTRUCTIVE)
+RESET_PAYLOAD = (0x00, 0x00, 0x00, 0x00)
+BULK_SET_OFFSET = 0x64        # every bulk write ("Set_All_*") opcode == its read opcode + 0x64
+FIRMWARE_DATA_GET_CMD = 0x0E  # read the internal effect-label database (hardware-confirmed read)
+FIRMWARE_DATA_SET_CMD = FIRMWARE_DATA_GET_CMD + BULK_SET_OFFSET  # 0x72: "Update Internal Data"
+FIRMWARE_DATA_SET_SUB = 0x0A
 READ_PREFIX = (0x0F, 0x0F)
 WRITE_ACK = b"\xf0\x09\xf7"  # the device's per-write acknowledgement
 LIVE_WRITE_PRELUDE = b"\xff"  # 0xFF byte the editor sends before writing config *during* live view
@@ -174,6 +187,50 @@ def usb_midi_stream_start_frame(model: int = DEFAULT_MODEL) -> bytes:
 def usb_midi_stream_stop_frame(model: int = DEFAULT_MODEL) -> bytes:
     """Stop LF+ live USB-MIDI streaming while leaving the serial port open."""
     return frame_bytes(model, *READ_PREFIX, USB_MIDI_STREAM_STOP_CTRL)
+
+
+def bulk_set_cmd(get_cmd: int) -> int:
+    """The bulk-WRITE opcode that pairs with a bulk-read opcode (`Set_All_*` = `Get_All_*` + 0x64)."""
+    return get_cmd + BULK_SET_OFFSET
+
+
+def thru_mode_start_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """`MIDI_Start_MIDI_THRU_MODE` (CB) — UNVERIFIED on hardware; see the CB/CF note in docs."""
+    return frame_bytes(model, *READ_PREFIX, THRU_MODE_START_CTRL)
+
+
+def simulator_start_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """`MIDI_START_SIMULATOR_MODE` (CF) — byte-identical to usb_midi_stream_start_frame()."""
+    return frame_bytes(model, *READ_PREFIX, SIMULATOR_START_CTRL)
+
+
+def reset_config_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """`MIDI_FORCE_CONFIG_RESET` (D0): wipes the unit's global config. UNVERIFIED and DESTRUCTIVE —
+    callers must gate it behind an explicit backup + confirmation; the app never calls this."""
+    return frame_bytes(model, *READ_PREFIX, RESET_CONFIG_CTRL, *RESET_PAYLOAD)
+
+
+def reset_factory_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """`MIDI_FORCE_ALL_RESET` (D1): factory-resets the unit. UNVERIFIED and DESTRUCTIVE (see above)."""
+    return frame_bytes(model, *READ_PREFIX, RESET_FACTORY_CTRL, *RESET_PAYLOAD)
+
+
+def internal_data_update_frame(model: int = DEFAULT_MODEL) -> bytes:
+    """Header of "Update Internal Data" (`Set_All_Firmware_Data_effects`): `… 0F 0F 72 0A F7`. The
+    editor waits 0.1 s, streams the 24,000-byte effect-label block, then expects the unit to echo
+    its 16-bit byte-sum (see internal_data_checksum / internal_data_ack_ok). Whether the block is
+    sent raw or nibble-encoded is UNVERIFIED — capture the original before implementing the send."""
+    return frame_bytes(model, *READ_PREFIX, FIRMWARE_DATA_SET_CMD, FIRMWARE_DATA_SET_SUB)
+
+
+def internal_data_checksum(payload: bytes) -> int:
+    """The 16-bit sum of every payload byte that the editor compares with the unit's reply."""
+    return sum(payload) & 0xFFFF
+
+
+def internal_data_ack_ok(reply: bytes, payload: bytes) -> bool:
+    """True if `reply` is exactly the unit's 2-byte big-endian echo of internal_data_checksum()."""
+    return len(reply) == 2 and ((reply[0] << 8) | reply[1]) == internal_data_checksum(payload)
 
 
 def live_view_start_frame(model: int = DEFAULT_MODEL) -> bytes:

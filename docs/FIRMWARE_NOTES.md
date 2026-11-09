@@ -24,20 +24,41 @@ Each file is a **single** sysex frame (one `F0 … F7`), header:
 ```
 F0 00 00 7C 08 06 01 00 00 03 …(nibble payload)… F7
    └──┬──┘  │  └──────┬──────┘
-   FAMC ID  │   upload sub-header (same across all 5 models)
+   FAMC ID  │   13-byte header incl. model + version (see "Decoded format")
             └─ 08 = FIRMWARE UPLOAD command
 ```
 
 Key facts:
 - `00 00 7C` is the FAMC manufacturer ID (same as backups).
 - The **command byte is `08`** — distinct from `0F` (backup/dump + Editor-Mode handshake) and the
-  per-record write opcodes the editor already speaks. This is the one new opcode a future flasher
-  would use.
-- The payload is **nibble-encoded** — every byte is `0x00–0x0F`, i.e. 4 bits of real data per
-  transmitted byte. So ~250 KB on the wire ≈ ~125 KB of actual MCU image.
-- **The model is implicit in the binary** (different size/content), not a header field — bytes
-  4–9 are identical across all five models. A flasher must therefore pick the right file for the
-  connected model; it cannot derive the model from the firmware header.
+  per-record write opcodes the editor already speaks. This is the one new opcode a flasher uses.
+- **The whole body is now decoded (2026-11-09, verified on 332/332 images, v3.34 → v6.32)** — see
+  "Decoded format" below and `lffirmware/codec.py`. This supersedes the earlier notes that the
+  payload was an opaque nibble stream and that "the model is implicit in the binary": the header
+  carries the **model letter** and **version**, and the unit's MCU is a **PIC18**.
+
+### Decoded format (`lffirmware/codec.py`)
+```
+F0 00 00 7C 08 06 | header (13) | payload (N nibbles) | trailer (4 nibbles) | F7
+header  = 01 00 00 | blocks (3 nibbles) | 00 00 00 00 | major (nibble) | minor (raw, decimal) | model (ASCII)
+payload = the PIC18 program image; every byte sent high nibble first, each nibble XOR 0x5;
+          bytes are 16-bit words HIGH byte first (the MCU is little-endian → swap each pair)
+trailer = 16-bit sum of the payload nibbles (raw), hi nibble first
+```
+- `blocks × 128` = image length in bytes (12+ v6.32: 1002 × 128 = 128,256).
+- Model letters: **Mini `F`, 12 `J`, 12+ `K`, JR+ `L`, Pro+ `H`** (so the model *can* be read from the
+  file; the loader now does, and refuses a filename that contradicts the header).
+- Version: major in the header nibble, minor as a decimal byte (`0x20` = 32 → v6.32).
+- **There is no signature and no encryption — only the 16-bit nibble sum.** That is what makes an
+  image machine-readable *and* what makes patching technically possible; it is also why a
+  corrupt-but-checksummed image is only stopped by the device's own bootloader. Treat custom images
+  as brick-risk until a bricked-unit volunteer proves the path.
+- Entry vectors decode to three PIC18 `GOTO`s (reset `0x0000` → `0x1F800`, i.e. the boot-loader
+  region *above* the image, which is not part of the `.syx`; high/low interrupt → `0x1D6AE`/`0x1D4D0`).
+- `python -m lffirmware --image X.syx --decode out.bin` writes the little-endian PIC18 memory image;
+  Ghidra's `PIC-18:LE:24:PIC-18` language loads it and finds `Reset`, `HighInterrupt`, `LowInterrupt`
+  and ~335 LCD strings (the unit's whole menu text table at `0x1E083…`, plus `Waiting`, `KEMPER`,
+  `AXE-FX III`, `Reset Pre Pg Functions`, …).
 
 ### Flashing — now in a separate beta tool, still NOT in the editor
 Writing this image to the device is the one genuinely **brick-risk** operation (an

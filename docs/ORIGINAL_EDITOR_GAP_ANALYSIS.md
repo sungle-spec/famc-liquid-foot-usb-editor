@@ -12,14 +12,13 @@ menus/windows, plus local analysis of the v6.31/v6.32 firmware images.
 > `rea decompile` works against the Mac binary (first import ~5 min; set
 > `REA_GHIDRA_STARTUP_TIMEOUT_MS`, default 330 s is too short). What did not work:
 > `inspect-firmware-regions` needs Linux + binwalk, and REA could not unpack the Windows
-> Inno-style installer (root-only inventory), so **the Windows build is still unanalysed**. The
+> installer itself (root-only inventory) — it is Inno Setup 5.5.7, so it was unpacked with
+> `innoextract` instead (section 5f). The
 > frame table in section 5a was recovered with `llvm-objdump` + `nm` symbols — see
 > `scripts/extract_original_frames.py`; sections 5d–5e come from REA/Ghidra decompiles.
 >
-> **Windows build:** not analysed. The Inno-style `SetupLF+Editor_64bit v6_31.exe` could not be
-> unpacked with `unar`. Both builds come from the same Xojo project, so the menu/window inventory
-> below applies to both; platform differences (serial enumeration, "Failed to Send" connection
-> engine) are transport-level only.
+> **Windows build:** analysed in section 5f — feature-identical to the Mac build (same Xojo
+> project); the inventory below applies to both.
 
 ## 1. Original v6.31 menu tree (recovered from the binary) vs. the rebuild
 
@@ -189,3 +188,48 @@ Kemper indices match, with TUNER = 16. `SYNC_EFFECTS` now has 16 = "Tuner", and
 (`options_by` in the schema + an `lf-set` event from `App.set`). Changing the device never rewrites
 the effect byte; a stored value missing from the current list shows as `(unknown: N)`. Verified in
 the desktop widget tests and in a real browser against the Axe-Fx III factory template.
+
+### 5f. Windows build (v6.31 x64, unpacked with `innoextract`)
+`SetupLF+Editor_64bit v6_31.exe` is Inno Setup 5.5.7; `LF+Editor.exe` is a PE32+ Xojo app.
+- **Feature set is identical to the Mac build.** Diffing window classes, the whole menu-caption block
+  and ~1,200 user-visible captions (after stripping Xojo property suffixes) leaves only platform
+  plumbing. The one user-visible difference: the Mac build exposes virtual CoreMIDI ports
+  (`LF+ IN PORT` / `LF+ OUT PORT`); Windows uses WinUSB (`WinUSBDeviceMBS`) instead. The rebuild's
+  USB-MIDI Bridge already covers that role.
+- **FTDI IDs:** FAMC's driver INF lists VID `0x0403` with PIDs `6001`, `6015` and the custom
+  **`87C0`–`87C6`**. The rebuild matches FTDI by vendor ID, so these are already covered.
+- The install bundles 8 firmware zips (v4.73 … v6.31 → 41 images): **all 41 are already in the loader's
+  241-image SHA-256 allowlist** — nothing new.
+
+### 5g. Firmware image format — decoded
+The "scrambled" `.syx` payload is **PIC18 machine code, nibble-XOR 0x5**. 332/332 images (v3.34 → v6.32)
+satisfy: 13-byte header (model letter + version), `blocks × 128` = length, trailer = 16-bit nibble
+sum; decode → encode is byte-exact. Full layout in [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#decoded-format-lffirmwarecodecpy);
+code in `lffirmware/codec.py` (+ `tests/test_firmware_codec.py`). Consequences:
+- The loader now verifies each image's own header, length and checksum (refusing corrupt/truncated
+  files even with the unverified override) and takes the **model from the header**, not the filename.
+- `--decode` + Ghidra's PIC-18 language gives a real disassembly path for the firmware (vectors,
+  ~335 LCD strings). There is **no signature** — only a 16-bit sum — so a modified image can be made
+  well-formed (`codec.encode`); whether the *boot loader* accepts it is untested. Don't flash custom
+  images except on a sacrificial/bricked unit, and note FAMC's firmware is copyrighted.
+
+### 5h. Firmware menu text vs. editor coverage
+The v6.32 12+ image's 335 LCD strings (the unit's settings/menu table, `0x1E083…`) were compared with
+every label/tooltip the editor ships: only ten had no keyword counterpart, and checking those against
+the original editor shows **no firmware setting the editor is missing**:
+- `System SnapShot Store/Restore`, `Page LOCK/UNLOCK` are programming-*command functions* (already
+  in the rebuild's 0-67 function table).
+- `MAIN LCD Contrast` / `BTN LCD Contrast`, `FULL MIDI DUMP` (send everything out MIDI DIN),
+  `Call Support`, `Firmware Waiting/Failed` are **device-menu-only** — absent from the original
+  editor and from the Config record too.
+- The firmware also names sibling products: `Liquid Router`, `Liquid Tracks`, `Hub Device`,
+  `Expander Mode`, `Editor Mode+` (a "Liquid Tracks" product is not in this project).
+
+### 5i. Frame builders added (no UI, never sent)
+`lfeditor/comms/protocol.py` now builds the recovered frames: `reset_config_frame` (D0),
+`reset_factory_frame` (D1), `thru_mode_start_frame` (CB), `simulator_start_frame` (CF),
+`internal_data_update_frame` (`72 0A`) + `internal_data_checksum` / `internal_data_ack_ok`, and
+`bulk_set_cmd` (**every bulk-write opcode = its read opcode + 0x64**, e.g. Presets 05→69).
+Tests pin the exact bytes and assert no app module references the destructive builders
+(`tests/test_protocol_original_frames.py`). These are **static-analysis results, not
+hardware-confirmed**; enabling any of them still needs a capture of the original editor on a unit.
