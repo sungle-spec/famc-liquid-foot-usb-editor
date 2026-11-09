@@ -166,7 +166,7 @@ productivity features the original app had that our rebuild doesn't yet:
 | **Re-order presets/songs → auto-rewrite references** (Save/Sync) | v4.62/6.22 | ✅ done (Song/Set-List slot refs; command-ref rewrite needs un-RE'd jump func codes) |
 | **MIDI Monitor / MIDI Pass-Thru** utilities | v4.55 | ✅ done |
 | Command **"helpers"** (type `129bpm`, `120ms`, or note name `C#4`) | v4.55 | ⛔ not yet |
-| **"UPDATE INTERNAL DATA / DATABASE"** push on first v6 connect (effect-name tables) | fw v6.00 / editor | ⛔ not modelled |
+| **"UPDATE INTERNAL DATA / DATABASE"** push on first v6 connect (effect-name tables) | fw v6.00 / editor | ⚠️ tables recovered (`model/sync_effects.py`), frame + checksum builders added; the send path is not enabled (needs a capture) |
 | `DELETE` clears a command, `ESC` restores | v6.02/4.90 | ⛔ partial |
 
 **Highest-value, lowest-risk to add next** (all offline, all on data we already decode):
@@ -187,6 +187,11 @@ plus the one data-model gap of MOMENTARY/JUMP-TO-PRESET command function codes (
 re-order also rewrite command-table preset references, not just Song/Set-List slots).
 
 The **"UPDATE INTERNAL DATA"** item is worth a flag: on first connect to a v6 device the original
-editor pushes an internal effect/label database (e.g. Kemper effect labels through KPA fw 7.3.2).
-That payload isn't in our data model; if a user's device shows stale effect names, that's why. It's
-a device-write feature (gated, Phase 2+) and not needed for offline `.syx` editing.
+editor pushes an internal effect/label database. *(Update 2026-11-09: decompiled — it is
+`Set_All_Firmware_Data_effects`: header `0F 0F 72 0A`, then 5 devices × 200 slots × (16-char name +
+8-char nick) = 24,000 bytes built from `Firmware_Effect_Labels`, then the unit echoes a 16-bit
+byte-sum. The Axe-Fx III (175), Axe-Fx II (85) and Kemper (17 + 87 effect types) tables are now in
+`lfeditor/model/sync_effects.py` and drive the IA-Slot "Sync effect" list. Still unknown: raw vs
+nibble-encoded payload, devices 0/1. See [ORIGINAL_EDITOR_GAP_ANALYSIS.md](ORIGINAL_EDITOR_GAP_ANALYSIS.md).)*
+That is why a unit with stale effect names needs the original editor's push; it is a device-write feature
+(gated) and not needed for offline `.syx` editing.

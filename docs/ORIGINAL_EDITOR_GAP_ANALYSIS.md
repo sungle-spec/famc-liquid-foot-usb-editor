@@ -106,14 +106,21 @@ What this means for "new firmware features / debugging the controller":
   record-level "device diff" (read device → compare to open file) as debug tooling; (c) use the
   decoded firmware release notes as a checklist for the IA-Slot sync-effect enumerations.
 
-## 4. Suggested next steps
+## 4. Status and next steps (updated 2026-11-09)
 
-1. Decide on REA (see the question at the end of the session) — run
-   `analyze` on the Mac Mach-O and, once unwrapped, the Windows PE for `WindowExtSyncParams`,
-   the Device Definitions loader, and the Simulator opcode.
-2. Capture Simulator Mode, Update Internal Data and Kemper/AXE sync traffic with
-   `scripts/capture_original.sh` on the real unit.
-3. Ship the cheap host-side items: undo/redo, open-file stats, release-notes/about "What's new".
+Done: REA/Ghidra analysis of the Mac binary, Windows build compared, sysex frame table, per-device
+sync-effect tables (+ the Sync-effect dropdown fix), firmware format decoded, loader hardened, frame
+builders added. Remaining, in value order:
+
+1. **Hardware captures** ([HARDWARE_RE_CAPTURE.md](HARDWARE_RE_CAPTURE.md)): Simulator, `CB` vs `CF`,
+   Update Internal Data, Axe-Fx/Kemper sync exchange. Nothing destructive is enabled without them.
+2. **External Device Sync (Axe-Fx / Kemper import)** — option strings, modes and routines are known
+   (`WindowExtSyncParams`: `AXE_SYNC`/`KEMPER_SYNC` are empty stubs; the work is in
+   `LoadExternalData_*` / `AXE_SYNC_QuickProgram`, decompiles still pending) — needs an external unit to test.
+3. **External Device Definitions** file format; selective **Export Data** dialog; **Undo/Redo**; open-file
+   stats; release-notes window — host-side, no hardware.
+4. **Custom firmware** — technically possible (no signature, 16-bit sum only) but brick-risk and
+   untested; see §5g. Not recommended before a bricked-unit volunteer validates the loader path.
 
 ## 5. REA/disassembly findings (2026-11-09)
 

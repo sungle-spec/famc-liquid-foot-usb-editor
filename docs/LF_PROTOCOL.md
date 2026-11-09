@@ -121,3 +121,22 @@ Value indices into the decoded type-1 payload (each "value" = one decoded byte),
 
 The per-preset v6 blocks (types 9 & 10, numbered per preset) hold further v6 fields
 (extra IA/MIDI messages, scenes, colors, etc.) — mapped during P3/P5.
+
+## Additional commands recovered from the original editor (static analysis, 2026-11-09)
+
+Not hardware-confirmed unless noted. All use `F0 00 00 <id> 0F 0F <cmd> … F7` (`<id>` = `0x7C`).
+Full table and caveats: [ORIGINAL_EDITOR_GAP_ANALYSIS.md](ORIGINAL_EDITOR_GAP_ANALYSIS.md) §5a.
+
+| Cmd | Meaning | Status |
+|---|---|---|
+| `C9` / `CA` / `CC` / `CF` / `D2` | handshake / session / stop / USB-MIDI stream start / live-view | hardware-confirmed (see LF_USB_DIRECT) |
+| `CB` | `MIDI_Start_MIDI_THRU_MODE` | unverified — `CF` is labelled *Simulator* in the binary but is what the Pass-Thru capture saw |
+| `D0 00 00 00 00` | Reset Config in LF+ | unverified, **destructive** |
+| `D1 00 00 00 00` | Reset to Factory Defaults | unverified, **destructive** |
+| `05…10` | bulk **read** per record type | hardware-confirmed |
+| `69…74` | bulk **write** per record type — **always the read opcode + `0x64`** (Config's `6F` inferred) | observed in the binary only |
+| `72 0A` | "Update Internal Data" (write of the `0E` firmware-data block: 5 devices × 200 × 24 B), then the unit echoes a 16-bit byte-sum | unverified (payload encoding unknown) |
+
+Pure builders for these live in `lfeditor/comms/protocol.py` (never called by the app).
+
+The firmware-upload frame (`F0 00 00 7C 08 06 …`) is documented in [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md).

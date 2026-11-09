@@ -48,3 +48,17 @@ Frames are raw bytes (not MIDI): `F0 00 00 7C <dir> … <cmd> … F7` (model byt
 control's OFF-state capture against its ON-state capture; the differing command/byte is the mapping.
 Add confirmed findings to `model/*.py` + `docs/LF_DATA_MODEL.md`. See `scripts/lf_usb.py` and
 `docs/LF_USB_DIRECT.md` for the proven frame format and the get-command set.
+
+## Captures that would unlock the next features (requested 2026-11-09)
+
+The original editor's behaviour is now known statically (see
+[ORIGINAL_EDITOR_GAP_ANALYSIS.md](ORIGINAL_EDITOR_GAP_ANALYSIS.md)); these need the real unit. Take a
+`.syx` backup first (**From LF+ → Backup**) and verify it re-opens before any of them.
+
+| Capture | What it settles | Risk |
+|---|---|---|
+| **Utilities → Simulator Mode** (Start / Stop) | whether Simulator really is `0F 0F CF`, and what the unit streams | low |
+| **Utilities → MIDI Pass Thru Utility** vs Simulator | the `CB` vs `CF` question (which byte starts Pass-Thru) | low |
+| **Hardware → Special – Update Internal Data** | raw vs nibble-encoded 24,000-byte payload, devices 0/1 contents, the 2-byte echo | medium (rewrites the unit's effect DB; backup first) |
+| **Axe-Fx III / Kemper sync** (External Device Sync window, one preset) | the external-device MIDI exchange the sync import uses | low (needs the external unit) |
+| Reset Config / Reset to Factory | confirm `D0` / `D1` and any acknowledgement | **destructive — only on a unit you can restore from a backup** |

@@ -133,7 +133,8 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   [docs/EEPROM_SWITCH.md](docs/EEPROM_SWITCH.md) for what it does and what to expect),
   Connect/Disconnect, Get All from LF+, Send Edits to LF+, Send All to LF+, **USB MIDI Bridge…** (see below). *Reset Config / Reset
   to Factory / Load Firmware* are shown but disabled in this build (device-side resets and
-  firmware flashing aren't enabled yet).
+  firmware flashing aren't enabled yet — the protocol is known but not yet confirmed on hardware;
+  for firmware use the separate [Firmware Loader](docs/FIRMWARE_LOADER.md)).
 - **Complete Transfers** — Get All from LF+ / **Send All to LF+** (writes every record in the open file, so a `.syx` backup can be restored).
 - **Settings** — **Show raw bytes** toggles the raw-decoded-values table on every tab (off by
   default).
@@ -143,7 +144,7 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
 | Tab | Edits |
 |---|---|
 | **Presets** | full/nick name, default page, IA-slot map, behavioural flags, step names, **IA-Slot Defined Labels**, **Preset MAP Labels** (1–20), initial IA-slot ON-states, and the **Command-Programming table** (`Function · MIDI device · Cmd · CC#/PC# · Data` — the MIDI column resolves the channel to its device name) |
-| **IA-Slot** | switch type, sync device & effect, group, preset label, on/off/bypass/blocked colours, On- and Bypass-command tables (same `[func,b1,b2,b3]` format as presets, side by side), step toggles |
+| **IA-Slot** | switch type, sync device & effect (the effect list changes with the device: Axe-Fx III, Axe-Fx II or Kemper), group, preset label, on/off/bypass/blocked colours, On- and Bypass-command tables (same `[func,b1,b2,b3]` format as presets, side by side), step toggles |
 | **IA-Maps** | the 60-cell button → IA-slot map (name pickers, 6×10) |
 | **Pages** | graphical footswitch pedalboard + page-group navigator; each button's Function-1 / Function-2 is a **Type + Value** picker (Empty / Preset / Function / IA Slot / Page Select, items listed by name) + page parameters |
 | **Songs** | name/nick, trigger type, **MTC** (enable + Hr/Min/Sec/Frame), the 24-slot **preset list** (name pickers), and **LCD Button Labels** (1–12) |

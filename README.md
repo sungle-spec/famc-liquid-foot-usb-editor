@@ -24,16 +24,19 @@ editor and connect your LF+ in minutes.
 
 ## Status
 
-Feature-complete for offline editing and host-side workflow; **297 tests pass**. The remaining work
-is device-side (gated resets) and firmware flashing. See `docs/` for the reverse-engineering
-write-up.
+Feature-complete for offline editing and host-side workflow; **493 tests pass**. The remaining work
+is device-side (gated resets, Update Internal Data, Simulator Mode) and Axe-Fx/Kemper sync import —
+all of which need captures of the original editor on a real unit. See `docs/` for the
+reverse-engineering write-up and
+**[docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md](docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md)** for the audit of the
+original Mac/Windows editor and the firmware (what we match, what is left, and why).
 
 | Phase | State |
 |---|---|
 | P0 — Repo & tooling | ✅ done |
 | P1 — Protocol RE (decompile JAR, decode sysex dumps) | ✅ wire format cracked, byte-exact round-trip |
 | P2 — UI capture of all 11 tabs | ✅ [docs/LF_UI_MAP.md](docs/LF_UI_MAP.md) + tab captures in [docs/ui/](docs/ui/) |
-| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 297 tests total |
+| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 493 tests total |
 | P4 — App shell + Presets tab | ✅ runnable (`python -m lfeditor`) |
 | P5 — Remaining tabs | ✅ all 11 tabs; **data model complete** — every user-facing control mapped (extension records, command tables, full Config: LCD/Extender/Tap-Tempo/Combo, exp-pedals, colours) |
 | P6 — Device comms (USB-serial + MIDI) | ✅ **record read/write + bidirectional live USB MIDI confirmed on real hardware**; see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md) |
@@ -41,7 +44,8 @@ write-up.
 | P8 — Faithful UI rebuild | ✅ all 11 tabs rebuilt to the original v6.31 layout — dark FAMC theme, per-record transfer header, titled section panels, vertical rocker toggles, green LCD fields; **Midi/Groups** (two-col channel grid), **Pages** (graphical pedalboard + page-group navigator), **Global** (5-column, every mapped Config field surfaced), **IA-Maps** (6×10 name pickers), **Set-List** (5×12), **Colors** (4-col), and extension-record label panels on **Presets**/**Songs**, **Songs MTC** (enable + Hr/Min/Sec/Frame), and **Pages** button-function labels decoded to names. Build spec captured in [docs/ui/ORIGINAL_LAYOUT.md](docs/ui/ORIGINAL_LAYOUT.md). All 11 tabs match the original v6.31 layout |
 | P9 — Host-side workflow parity | ✅ icon toolbar; whole-record **copy/paste/clear**; **CSV import/export** + **Reports** (format captured byte-for-byte from the original); **Find** search (name + MIDI-command queries); a left-side **Q-LIST** navigator dock that follows the current tab, with **drag-drop** onto slot pickers / command rows; **right-click multi-record** toggle edits; **MIDI Monitor / Pass-Thru**; **Quick Repeated Command Programmer**; **Re-order with Save/Sync** reference rewrite; **About / License** dialog; **EEPROM wizard**. See [docs/FIRMWARE_NOTES.md](docs/FIRMWARE_NOTES.md) for the original-vs-rebuild feature audit |
 | P9b — Fidelity fixes (vs the live editor) | ✅ full **command-function table** RE'd (0–67, all 68 functions; fixed two mis-coded entries); **IA-Slot command** off-by-one corrected (was reading the MIDI status byte as the function); spin-box arrows, command-table columns, Pages-panel alignment |
-| P10 — Device-side resets + firmware flash | ⛔ deferred (gated Phase 2 writes; Phase 3 flashing is brick-risk) |
+| P10 — Device-side resets + firmware flash | ⛔ deferred (gated Phase 2 writes; Phase 3 flashing is brick-risk). Groundwork done: the reset / simulator / Update-Internal-Data frames and the **firmware image format are decoded** (PIC18, 332/332 images verified) — see [docs/FIRMWARE_NOTES.md](docs/FIRMWARE_NOTES.md) |
+| P11 — Original-editor parity audit (REA + Ghidra) | ✅ done for the Mac/Windows v6.31 binaries: full menu/window inventory, every sysex frame, per-device **Sync-effect** tables (fixes the IA-Slot *Sync effect* list), Windows build compared. Open items tracked in [docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md](docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md) |
 
 **Working today:** open any LF+ `.syx` backup and edit, all **losslessly** (re-encodes
 byte-for-byte; only changed records change):
@@ -49,7 +53,7 @@ byte-for-byte; only changed records change):
   Labels (Ext9), and the **Command Programming table** with the original's columns
   (`Function · MIDI device-name · Cmd · CC#/PC# · Data`; the MIDI column resolves the channel to
   its device name).
-- **IA-Slot:** switch type, sync device/effect, group, colours, On + BYPASS command tables (the
+- **IA-Slot:** switch type, sync device/effect (the effect list follows the chosen device: Axe-Fx III 175, Axe-Fx II 85, Kemper 17), group, colours, On + BYPASS command tables (the
   same 4-byte `[func,b1,b2,b3]` format as presets, side by side), step toggles.
 - **IA-Maps:** 60-cell button→slot map (name pickers, 6×10). **Pages:** graphical footswitch
   pedalboard + page-group navigator; each button's Function-1/2 is a **Type + Value dropdown**
@@ -98,7 +102,9 @@ byte-for-byte; only changed records change):
   ports there.
 - **Firmware / bricked units** — a standalone **[LF+ Firmware Loader (beta)](docs/FIRMWARE_LOADER.md)**
   targets recovery of units bricked by failed firmware updates (community-tested; the editor's own
-  *Load Firmware* stays disabled until it graduates).
+  *Load Firmware* stays disabled until it graduates). It now verifies each image's own header, length
+  and checksum and reads the model from the image; `--decode` exports the PIC18 program memory for a
+  disassembler.
 - **Hover help** — every control shows the **original LF+ Editor's exact tooltip** on hover
   (recovered verbatim from the app and mapped to our controls): 131 field + 3 section tooltips
   across 10 tabs, scoped per tab, the Global/IA-Slot maps confirmed by a live hover pass against the
@@ -173,8 +179,10 @@ Four independent sources cross-check each other:
 | `lfeditor/search.py` · `lfeditor/ui/qlist_dock.py` | Find search engine · Q-LIST navigator dock |
 | `lfeditor/ui/midi_monitor.py` | MIDI monitor / pass-thru utility |
 | `lfeditor/quickprog.py` · `lfeditor/reorder.py` | Quick Repeated Command Programmer · re-order with reference sync |
-| `lffirmware/` | standalone **Firmware Loader (beta)** — bricked-unit recovery over MIDI ([docs](docs/FIRMWARE_LOADER.md)) |
-| `docs/` | `LF_PROTOCOL.md`, `LF_DATA_MODEL.md`, `LF_UI_MAP.md`, `RE_NOTES.md`, `FIRMWARE_NOTES.md` |
+| `lffirmware/` | standalone **Firmware Loader (beta)** — bricked-unit recovery over MIDI ([docs](docs/FIRMWARE_LOADER.md)); `codec.py` encodes/decodes the firmware image format |
+| `lfeditor/model/sync_effects.py` | per-device IA-Slot *Sync effect* tables (Axe-Fx III / II, Kemper) recovered from the original editor |
+| `scripts/extract_original_frames.py` | static extraction of every sysex frame the original editor builds |
+| `docs/` | `LF_PROTOCOL.md`, `LF_DATA_MODEL.md`, `LF_UI_MAP.md`, `RE_NOTES.md`, `FIRMWARE_NOTES.md`, `ORIGINAL_EDITOR_GAP_ANALYSIS.md` |
 | `reference/` *(not in this repo)* | the maintainer's local RE source material — device dumps, FAMC files; tests that need it skip cleanly |
 | `tests/` | the full pytest suite — codec round-trips vs the factory files everywhere, plus reference-dump tests that run on the maintainer's checkout |
 | `.github/workflows/tests.yml` | CI: the full pytest suite head-less on Windows/Linux/macOS |

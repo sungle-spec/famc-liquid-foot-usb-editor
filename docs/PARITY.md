@@ -62,6 +62,7 @@ and **hover tooltips** on every control from the same curated `ui/help_text.py` 
 | **Re-order Records** | ✅ | ✅ | reuses `reorder.py` (with ref-sync) |
 | Drag-drop slot assign (Q-LIST → slot/command) | ✅ | ✅ | Q-LIST items drag onto slot pickers + command rows; Pages tile drag-swap |
 | Device I/O: Connect + From/To LF+ | ✅ (USB-serial) | ✅ | WebSerial (`web/serial.js` + `webapi.dev_*`); hardware-verified 2026-07-13, write gated. See [WEBSERIAL.md](WEBSERIAL.md) |
+| IA-Slot **Sync effect follows Sync device** (Axe-Fx III / II / Kemper tables) | ✅ | ✅ | `DependentEnumField` (desktop) · `options_by` + `lf-set` event (web); same schema |
 | Device I/O: MIDI Monitor, EEPROM wizard, live-calibration, resets | ✅ | 🔌 | not yet ported to WebSerial |
 | Device I/O: **bidirectional USB MIDI Bridge** (virtual "LF+ IN PORT/ LF+ OUT PORT" ↔ device) | ✅ | 🔌 | needs bidirectional Web MIDI ↔ WebSerial forwarding; deferred (desktop-only for now) |
 
@@ -77,3 +78,11 @@ and **hover tooltips** on every control from the same curated `ui/help_text.py` 
   CSV) are ported too. Both builds passed the same UAT plan — see [UAT.md](UAT.md).
 - **Device I/O**: Connect / From-To LF+ work in both (web via WebSerial, hardware-verified
   2026-07-13). The MIDI monitor, EEPROM wizard, and live calibration remain desktop-only.
+
+## Parity with the *original* editor (not just desktop ↔ web)
+
+The audit of the original v6.31 Mac and Windows editors is in
+[ORIGINAL_EDITOR_GAP_ANALYSIS.md](ORIGINAL_EDITOR_GAP_ANALYSIS.md). Mac and Windows are feature-identical.
+Still missing in **both** of our builds: External Device Sync (Axe-Fx/Kemper import), External Device
+Definitions, Simulator Mode, Update Internal Data, Reset Config/Factory, selective Export dialog,
+Undo/Redo, open-file stats, release-notes window. The device-facing ones need hardware captures.

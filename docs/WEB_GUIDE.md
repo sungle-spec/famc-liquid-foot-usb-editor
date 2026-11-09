@@ -71,7 +71,7 @@ the answer is one hover away.
 |---|---|
 | **Presets** | name/nick, default page, IA-slot map, behaviour toggles, the 16-row **Command Programming** table, step names, IA-Slot Defined Labels, **MAP Label / Initial IA-Slot States**, Preset MAP Labels |
 | **Set-List** | last-song / end-of-list behaviour and the 60-slot **song list** (name pickers) |
-| **IA-Slot** | switch type, colours, group, sync device/effect, and the **On** and **Bypass** command tables |
+| **IA-Slot** | switch type, colours, group, sync device/effect (the effect list follows the device), and the **On** and **Bypass** command tables |
 | **IA-Maps** | the 60-cell button → IA-slot mapping (name pickers) |
 | **Midi/Groups** | 16 MIDI-channel device names, per-channel BANK +1/send/msb switches, Max Pre, Exclusive Groups, Grouped-IA order |
 | **Global** | power-up behaviour, tap tempo, hardware settings (Sysex ID, MIDI channel…), extender, LCD behaviour, combo blocking |
@@ -138,7 +138,7 @@ On the **IA-Slot** tab:
 3. The **On Command Programming** and **BYPASS (OFF) Command Programming** tables are two
    command tables side by side — same editing as scenario 2: what to send when the IA turns on,
    and what to send when it bypasses.
-4. **Sync device / Sync effect** link the slot to an Axe-Fx or Kemper effect for real-time sync.
+4. **Sync device / Sync effect** link the slot to an Axe-Fx or Kemper effect for real-time sync. Pick the device first — the effect list then shows that device's effects (Axe-Fx III 175, Axe-Fx II 85, Kemper 17). Changing the device leaves the stored effect untouched; an effect that doesn't exist on the new device shows as *(unknown: N)* until you pick one.
 
 ### 5. Build a song
 

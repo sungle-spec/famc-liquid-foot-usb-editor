@@ -105,7 +105,7 @@ Each tab edits one record type (or the global configuration). Full-window shots 
 |---|---|
 | **Presets** | name/nick, default page, IA-slot map, behaviour toggles, the 16-row command table, step names, IA-Slot Defined Labels, initial IA states, Preset MAP Labels |
 | **Set-List** | last-song / end-of-list behaviour, the 60-slot song list (name pickers) |
-| **IA-Slot** | switch type, colours, group, sync device/effect, the On and Bypass command tables |
+| **IA-Slot** | switch type, colours, group, sync device/effect (**the effect list follows the sync device**; changing the device never alters the stored effect — a value that isn't in the new device's list shows as *(unknown: N)*), the On and Bypass command tables |
 | **IA-Maps** | the 60-cell button → IA-slot mapping |
 | **Midi/Groups** | the 16 channel device names, per-channel BANK +1/send/msb, Max Pre, Exclusive Groups, Grouped-IA order |
 | **Global** | power-up, tap tempo, hardware IDs and timings, extender, LCD behaviour, combo blocking |
