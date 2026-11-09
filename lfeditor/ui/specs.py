@@ -10,11 +10,12 @@ losslessly. Midi/Groups and Pages are built as bespoke tabs (see ui/tabs/).
 from __future__ import annotations
 
 from .fields import (
-    HexBytesField, EnumField, FlagField, ToggleField, IAStateGridField,
+    HexBytesField, EnumField, DependentEnumField, FlagField, ToggleField, IAStateGridField,
     CommandTableField, StringField, ByteGridField, IntField, Int16Field, SlotPickerField,
     LabelGridField, ChannelNameField,
 )
 from .tabspec import Section, TabSpec, GlobalSpec   # Qt-free (so specs.py imports without PySide6)
+from ..model.sync_effects import effect_options_by_device
 from ..model.iamap import MAP_OFF as IAMAP_OFF, NUM_BUTTONS as IAMAP_BUTTONS
 from ..model.page import (
     FUNC1_OFF, FUNC2_OFF, NUM_BUTTONS as PAGE_BUTTONS, BUTTON_PARAM_OFF,
@@ -98,6 +99,12 @@ def _setlist_tab() -> TabSpec:
 
 
 def _iaslot_tab() -> TabSpec:
+    # "Sync effect" lists the effects of whichever device "Sync device" selects (AXE-FX III / II /
+    # KEMPER tables recovered from the original editor; see model/sync_effects.py).
+    sync_dev = EnumField(SYNC_DEVICE_OFF, "Sync device", SYNC_DEVICES)
+    sync_eff = DependentEnumField(SYNC_EFFECT_OFF, "Sync effect", effect_options_by_device(),
+                                  depends_on=SYNC_DEVICE_OFF)
+    sync_dev.add_listener(sync_eff.refresh)
     settings = Section("IA Slot Settings", [
         ToggleField(ENABLE_OFF, ENABLE_BIT, "Enabled"),
         EnumField(SWITCH_TYPE_OFF, "Switch type", SWITCH_TYPES),
@@ -107,8 +114,8 @@ def _iaslot_tab() -> TabSpec:
         EnumField(BLOCKED_COLOR_OFF, "Blocked colour", COLOR_NAMES),
         EnumField(GROUP_ID_OFF, "Group ID", GROUP_IDS),
         EnumField(PRESET_LABEL_OFF, "Preset label", PRESET_LABELS),
-        EnumField(SYNC_DEVICE_OFF, "Sync device", SYNC_DEVICES),
-        EnumField(SYNC_EFFECT_OFF, "Sync effect", SYNC_EFFECTS),
+        sync_dev,
+        sync_eff,
         ToggleField(GLOBAL_IA_OFF, GLOBAL_IA_BIT, "Global IA settings"),
         ToggleField(REMEMBER_STEP_OFF, REMEMBER_STEP_BIT, "Remember last step state"),
         ToggleField(FORCE_STEP_OFF, FORCE_STEP_BIT, "Force step #1 on preset change"),

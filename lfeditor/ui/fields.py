@@ -252,6 +252,11 @@ class EnumField(Field):
         self.offset, self.label, self.options = offset, label, options
         assert nibble in (None, "low", "high")
         self.nibble = nibble
+        self._listeners = []
+
+    def add_listener(self, cb):
+        """Call `cb()` after this field writes a changed value (lets a dependent field refresh)."""
+        self._listeners.append(cb)
 
     def _get(self, raw):
         if self.nibble == "low":
@@ -290,6 +295,51 @@ class EnumField(Field):
         if self._values[self.offset] != new:
             self._values[self.offset] = new
             self._emit_dirty()
+            for cb in self._listeners:
+                cb()
+
+
+class DependentEnumField(EnumField):
+    """An EnumField whose option list depends on another byte of the same record.
+
+    `options_by` maps the controlling byte's value (at `depends_on`) to that value's
+    `{value: label}` options — e.g. an IA-Slot's "Sync effect" list depends on its "Sync device".
+    Editing never rewrites this byte just because the controller changed; a stored value that isn't
+    in the current list is kept and shown as "(unknown: N)" so nothing is silently lost. Wire the
+    controller with `controller.add_listener(dependent.refresh)`."""
+
+    def __init__(self, offset: int, label: str, options_by: dict, depends_on: int):
+        super().__init__(offset, label, {})
+        self.options_by = options_by
+        self.depends_on = depends_on
+        self._values = None
+
+    def options_for(self, values) -> dict:
+        return self.options_by.get(values[self.depends_on], {})
+
+    def build(self):
+        self.w = QComboBox()
+        self.w.currentIndexChanged.connect(self._write)
+        return self.w
+
+    def load(self, values):
+        self._values = values
+        self.refresh()
+
+    def refresh(self):
+        values = self._values
+        if values is None:
+            return
+        opts = self.options_for(values)
+        cur = values[self.offset]
+        self.w.blockSignals(True)
+        self.w.clear()
+        for val, name in opts.items():
+            self.w.addItem(name, val)
+        if cur not in opts:
+            self.w.addItem(f"(unknown: {cur})", cur)
+        self.w.setCurrentIndex(self.w.findData(cur))
+        self.w.blockSignals(False)
 
 
 class MidiTableField(Field):

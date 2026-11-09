@@ -18,7 +18,7 @@ const App = {
   // ---- session helpers (thin wrappers over lfeditor.webapi.Session) ----
   count(t) { return this.session.count(t); },
   get(t, i, off) { return this.session.get(t, i, off); },
-  set(t, i, off, v) { this.session.set(t, i, off, v); this.markDirty(); },
+  set(t, i, off, v) { this.session.set(t, i, off, v); this.markDirty(); window.dispatchEvent(new CustomEvent("lf-set", { detail: { t, i, off } })); },
   getStr(t, i, off, len) { return this.session.get_str(t, i, off, len); },
   setStr(t, i, off, len, s) { this.session.set_str(t, i, off, len, s); this.markDirty(); },
   names(t) { const p = this.session.names(t); const a = p.toJs(); p.destroy(); return a; },

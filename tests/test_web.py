@@ -57,7 +57,11 @@ def test_enum_fields_carry_options():
             for sec in col:
                 for fld in sec["fields"]:
                     if fld["kind"] == "enum":
-                        assert isinstance(fld.get("options"), dict) and fld["options"]
+                        if fld.get("options_by"):     # DependentEnumField: options vary by another byte
+                            assert isinstance(fld.get("depends_on"), int)
+                            assert all(isinstance(o, dict) and o for o in fld["options_by"].values())
+                        else:
+                            assert isinstance(fld.get("options"), dict) and fld["options"]
 
 
 # ---- webapi (the browser session) ----

@@ -26,7 +26,7 @@ TAB_ORDER = [
 KIND = {
     "StringField": "string", "NameField": "name", "NickField": "nick",
     "IntField": "int", "Int16Field": "int16", "FlagField": "flag", "ToggleField": "toggle",
-    "EnumField": "enum", "MidiTableField": "midi_table", "PresetCmdTableField": "command_table",
+    "EnumField": "enum", "DependentEnumField": "enum", "MidiTableField": "midi_table", "PresetCmdTableField": "command_table",
     "CommandTableField": "command_table", "BitGridField": "bitgrid", "ByteGridField": "bytegrid",
     "Int16GridField": "int16grid", "SlotPickerField": "slotpicker", "HexBytesField": "hexbytes",
     "IAStateGridField": "iastate", "LabelGridField": "labelgrid", "MMCField": "mmc",
@@ -37,7 +37,7 @@ KIND = {
 _ATTRS = (
     "start", "offset", "length", "count", "lo", "hi", "plus_one", "invert", "low_nibble",
     "bitmask", "nibble", "cols", "width", "target_type", "unused_raw", "unused_label",
-    "unused_display", "ext_type", "data_start", "data_count",
+    "unused_display", "ext_type", "data_start", "data_count", "depends_on",
 )
 
 
@@ -61,6 +61,10 @@ def _field_dict(f, tab_title: str = "") -> dict:
         val = getattr(f, name, None)
         if isinstance(val, dict):
             d[name] = {str(k): v for k, v in val.items()}
+    # a DependentEnumField's options vary with another byte: {controller value: {value: label}}
+    ob = getattr(f, "options_by", None)
+    if isinstance(ob, dict):
+        d["options_by"] = {str(c): {str(k): v for k, v in opts.items()} for c, opts in ob.items()}
     return d
 
 

@@ -49,8 +49,10 @@ SYNC_EFFECTS = {
     5: "Stomp Mod", 6: "Stomp Delay", 7: "Stomp Reverb",
     8: "Performance Rig 1", 9: "Performance Rig 2", 10: "Performance Rig 3",
     11: "Performance Rig 4", 12: "Performance Rig 5",
-    13: "Performance Up", 14: "Performance Down", 15: "Tap Tempo",
+    13: "Performance Up", 14: "Performance Down", 15: "Tap Tempo", 16: "Tuner",
 }
+# NOTE: SYNC_EFFECTS above is the KEMPER (device 4) list only; per-device tables for the AXE-FX III
+# (175) / AXE-FX II (85) / KEMPER (17) live in model/sync_effects.py.
 
 
 class IASwitch(Record):

@@ -87,10 +87,26 @@ const LFRender = (() => {
       }
       case "enum": {
         const sel = el("select");
-        const opts = f.options || {};
-        for (const k of Object.keys(opts)) { const o = el("option", null, opts[k]); o.value = k; sel.appendChild(o); }
         const getRaw = () => { let v = app.get(type, idx, off); if (f.nibble === "low") v &= 0x0F; else if (f.nibble === "high") v = (v >> 4) & 0x0F; return v; };
-        sel.value = String(getRaw());
+        // `options_by` (DependentEnumField): the option list depends on another byte of the record,
+        // e.g. IA-Slot "Sync effect" follows "Sync device". A stored value missing from the current
+        // list is kept and shown as "(unknown: N)" rather than silently dropped.
+        const fill = () => {
+          const raw = getRaw();
+          const opts = f.options_by ? (f.options_by[String(app.get(type, idx, f.depends_on))] || {}) : (f.options || {});
+          sel.innerHTML = "";
+          for (const k of Object.keys(opts)) { const o = el("option", null, opts[k]); o.value = k; sel.appendChild(o); }
+          if (f.options_by && !(String(raw) in opts)) { const o = el("option", null, `(unknown: ${raw})`); o.value = String(raw); sel.appendChild(o); }
+          sel.value = String(raw);
+        };
+        fill();
+        if (f.options_by) {
+          const onSet = (e) => {
+            if (!sel.isConnected) { window.removeEventListener("lf-set", onSet); return; }
+            const d = e.detail; if (d.t === type && d.i === idx && d.off === f.depends_on) fill();
+          };
+          window.addEventListener("lf-set", onSet);
+        }
         sel.onchange = () => { const val = parseInt(sel.value, 10); let cur = app.get(type, idx, off); let nv; if (f.nibble === "low") nv = (cur & 0xF0) | (val & 0x0F); else if (f.nibble === "high") nv = (cur & 0x0F) | ((val & 0x0F) << 4); else nv = val & 0xFF; app.set(type, idx, off, nv); };
         return sel;
       }
