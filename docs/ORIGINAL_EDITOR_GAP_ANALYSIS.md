@@ -1,8 +1,21 @@
 # Original LF+ Editor v6.31 (Mac/Windows) — gap analysis & firmware leads
 
-Date: 2026-11-09. Method: static string extraction from the shipped v6.31 Mac binary
-(`/Applications/LF+ Editor.app`, x86_64 Xojo, 30 MB, 108k strings), diffed against the rebuild's
-menus/windows, plus local analysis of the v6.31/v6.32 firmware images.
+Date: 2026-11-09. Method: static analysis of the shipped v6.31 **Mac** binary (x86_64 Xojo, 30 MB,
+**unstripped**) and **Windows** installer (Inno Setup, unpacked with `innoextract`), the firmware images
+(v3.34 → v6.32) and the bundled resources — compared with the rebuild's menus, windows, data model and
+protocol. Tools: `strings`/`nm`/`llvm-objdump`, REA ([morluto/rea](https://github.com/morluto/rea)) with
+Ghidra, and Ghidra's PIC-18 module. **Nothing here was run against a real unit.**
+
+## Outcomes (what changed in the repo because of this audit)
+
+| Result | Where |
+|---|---|
+| IA-Slot **Sync effect** list was Kemper-only for every device and lacked *Tuner* — fixed: per-device tables recovered from the original (Axe-Fx III 175 · Axe-Fx II 85 · Kemper 17 + 87 effect types), validated against the factory templates; the dropdown now follows *Sync device* on desktop and web | `lfeditor/model/sync_effects.py`, `DependentEnumField`, `web/render.js`, `tests/test_sync_effects.py` |
+| **Firmware image format decoded** — PIC18 code, nibble-XOR 0x5, header (model letter + version + length), 16-bit nibble-sum trailer; byte-exact round trip on 332/332 images | `lffirmware/codec.py`, `tests/test_firmware_codec.py`, [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md) |
+| **Firmware loader hardened** — refuses images whose own header/length/checksum don't agree (even with the override); model read from the header, not the filename; `--decode` exports PIC18 memory | `lffirmware/images.py`, `cli.py`, [FIRMWARE_LOADER.md](FIRMWARE_LOADER.md) |
+| **Every sysex frame the original builds** recovered (reset D0/D1, thru CB, simulator CF, Update-Internal-Data `72 0A`, bulk write = read + 0x64, Fractal/Kemper requests); pure builders added, **never sent by the app** | `scripts/extract_original_frames.py`, `lfeditor/comms/protocol.py`, `tests/test_protocol_original_frames.py`, [LF_PROTOCOL.md](LF_PROTOCOL.md) |
+| Mac vs Windows compared (feature-identical); FTDI IDs and bundled firmware checked | §5f |
+| Open items and the hardware captures that would unlock them | §4, [HARDWARE_RE_CAPTURE.md](HARDWARE_RE_CAPTURE.md) |
 
 > **Status of REA ([morluto/rea](https://github.com/morluto/rea) v6.8.0, CLI via `npx`, no agent
 > config touched):** run after user approval. What worked: `inspect-macho` (confirmed the Mac
@@ -32,12 +45,12 @@ menus/windows, plus local analysis of the v6.31/v6.32 firmware images.
 | Edit | **Undo (⌘Z), Insert (⌘I), Delete, Select All** | ❌ no undo stack |
 | Utilities | **External Device Definitions** (⌘D) — import/export multiple, drag-drop to/from command rows | ❌ menu stub (disabled); tooltips already captured in `LF_TOOLTIPS.md` |
 | Utilities | **External Device Sync (Kemper/AXE-FX)** — `WindowExtSyncParams` | ❌ menu stub (disabled) |
-| Utilities | **Simulator Mode** (`MIDI_START_SIMULATOR_MODE`, Start/Stop/Clip/Clear All/Exit) | ❌ absent |
+| Utilities | **Simulator Mode** (`MIDI_START_SIMULATOR_MODE`, Start/Stop/Clip/Clear All/Exit) | ❌ absent (frame `CF` known; the `CB`/`CF` question needs a capture) |
 | Utilities | Quick Repeated Command Programmer | ✅ |
 | Utilities | MIDI Device I/O Utility · MIDI Pass Thru Utility | ✅ (MIDI Monitor / Pass-Thru, USB bridge) |
-| Hardware | Review/Install Latest Firmware · Load Firmware From File · Special Firmware Load (Forced) | ⛔ disabled; standalone `lffirmware` beta tool |
-| Hardware | **Special – Update Internal Data** (`HardwareFirmwareDataUpdate`) | ❌ (already flagged in FIRMWARE_NOTES) |
-| Hardware | Reset Config in LF+ (`MIDI_FORCE_CONFIG_RESET`) · Reset to Factory (`MIDI_FORCE_ALL_RESET`) | ⛔ disabled (gated Phase 2) |
+| Hardware | Review/Install Latest Firmware · Load Firmware From File · Special Firmware Load (Forced) | ⛔ disabled in the editor; standalone `lffirmware` beta tool (now structurally verifying images) |
+| Hardware | **Special – Update Internal Data** (`HardwareFirmwareDataUpdate`) | ⚠️ protocol + tables recovered, frame/checksum builders exist; send path **not enabled** (needs a capture — §5d) |
+| Hardware | Reset Config in LF+ (`MIDI_FORCE_CONFIG_RESET`) · Reset to Factory (`MIDI_FORCE_ALL_RESET`) | ⛔ disabled (gated); opcodes D0/D1 known, builders exist, unverified and destructive |
 | Hardware | Special – Clear Preset Labels / MAP Labels / Song Preset Labels | ✅ (Edit menu) |
 | Reports | Filter / Report / Save (⌘⇧P) | ✅ |
 | Complete Transfers | Get ALL from LF+ / Send ALL to LF+ | ✅ |
@@ -61,50 +74,40 @@ Other original windows found by class name: `WindowFindCommands` ✅, `WindowQui
    the external-device MIDI exchange (Axe-Fx III / KPA) — or Axe-Fx/Kemper MIDI docs.
 2. **External Device Definitions** — the data model behind the "drag a device effect onto a
    command row" feature. Tooltips are captured; file format and the definitions DB are not.
-   **[needs RE]** for the on-disk format (look for `*.def`/XML via the `XML.dylib` usage).
+   The on-disk format is still unrecovered (look for `*.def`/XML via the `XML.dylib` usage, or capture a saved file from the original).
 3. **Simulator Mode** — host turns the unit into a button/expression simulator
    (`MIDI_START_SIMULATOR_MODE`). Useful for debugging a programmed rig without stepping on the
    unit. Capture with the existing `scripts/lf_interpose.c` + `capture_original.sh`.
 4. **Undo/redo + Show Stats on open** — pure host-side, no hardware needed.
-5. **Update Internal Data** — pushes the effect/label database to v6 units. Capture-then-replay
-   (the payload ships inside the original app bundle; locate it in `Resources/`).
+5. **Update Internal Data** — pushes the effect/label database to v6 units. The payload is **not** a
+   resource file: the editor builds it at runtime from tables compiled into the binary (now recovered,
+   §5d/§5e). What is missing is the wire encoding of those 24,000 bytes — capture-then-replay.
 6. **Reset Config / Factory reset** — opcodes named in the binary; implement only behind the
    existing gated-write rules.
 
 ## 3. Firmware (v6.32 is the last release)
 
-Facts established locally (all five models, v6.31 and v6.32):
-
-- Single sysex frame `F0 00 00 7C 08 06 …`; the 13-byte pre-payload is `01 00 00 03 xx xx 00 00 00 00 06 20 yy`
-  where `20 yy` is the only non-nibble pair and differs per model (`46` Mini, `48` Pro+, `4A` 12,
-  `4B` 12+, `4C` JR+); the nibble pair just before it (frame offsets 10–11: `0e 0a` 12+, `0c 06` 12,
-  `0e 03` JR+, `0b 0b` Mini, `0e 0b` Pro+) also varies per model. Bytes 4–9 are still identical across
-  models as `FIRMWARE_NOTES.md` says, so the model marker (or a length/ID field) sits just after them.
-- The last 4 payload nibbles are a trailer (differs per model → likely checksum/length).
-- **The payload is not a plain nibble→byte packing.** Pairing nibbles yields long runs of `0x55`
-  and `0xAA`, and the tail padding is a repeating 16-byte pattern
-  (`55 AA BB 44 99 EE FF 88 DD 22 33 CC 11 66 77 00`) — i.e. the image is passed through a
-  scrambler/encoder (zero/0xFF flash filler maps to `55`/`AA`). Entropy of the paired bytes is
-  6.5 bits, so it is **not compressed or strongly encrypted**.
-- v6.31 → v6.32 (12+): the first ~17.7 KB of wire bytes are identical, everything after differs
-  (~80 % of bytes) — consistent with code shifting; a position-dependent cipher would show the same
-  signature, so this alone does not settle it.
-- The 2013 Java editor just streams the `.syx` untouched, so the encoder lives in FAMC's build
-  tooling and the decoder in the unit's bootloader — **neither is in the repo**.
+The firmware `.syx` format is fully decoded (§5g, [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md), `lffirmware/codec.py`):
+a 13-byte header (block count, major/minor version, **model letter** F/J/K/L/H), a PIC18 program image
+sent as nibbles XORed with 0x5 (16-bit words, high byte first), and a trailer that is the 16-bit sum of
+the payload nibbles. 332/332 images across v3.34 → v6.32 verify and re-encode byte-for-byte. Decoded
+images start with PIC18 reset/interrupt `GOTO`s; the boot-loader region (above the image) is not in the
+file. Ghidra's `PIC-18:LE:24:PIC-18` language loads them and finds ~335 LCD strings (the unit's menu text).
 
 What this means for "new firmware features / debugging the controller":
 
-- **Do not attempt patched firmware yet.** Producing a valid image needs the scrambler, the
-  trailer algorithm, and the MCU architecture, none of which are recovered. A wrong image bricks
-  the unit; the loader's own beta ladder is still unvalidated.
-- **[needs RE]** First step is cracking the transform: (a) try Manchester/Gray/nibble-permutation
-  models against the 55/AA structure on the five images, (b) once the plaintext is plausible,
-  identify the MCU (reset vectors / instruction patterns) and load it in Ghidra. This is the
-  right job for REA + Ghidra (installed, 12.2).
-- **Achievable now without firmware surgery:** (a) surface v6.x parameter bits that
-  `FIRMWARE_NOTES.md` says exist but aren't yet friendly controls; (b) add Simulator Mode and a
-  record-level "device diff" (read device → compare to open file) as debug tooling; (c) use the
-  decoded firmware release notes as a checklist for the IA-Slot sync-effect enumerations.
+- **Comparison done:** the firmware's menu text has no setting the editor lacks (§5h). New *features*
+  would therefore have to come from new firmware code, not from exposing existing settings.
+- **Patching is technically possible, not recommended yet.** There is no signature or encryption —
+  only a 16-bit sum, and `codec.encode` can package a modified image. Whether the *boot loader*
+  accepts such an image is untested, a bad image bricks the unit, the loader's own beta ladder is still
+  unvalidated, and FAMC's firmware is copyrighted. Do not flash custom images except on a
+  sacrificial/bricked unit.
+- **Debugging tools available now (no firmware surgery):** `--decode` + Ghidra for reading the firmware;
+  per-version diffing of the 332 images; the live USB-MIDI/Pass-Thru bridge and MIDI monitor; and, once
+  captured, Simulator Mode and a record-level "device diff" (read device → compare to the open file).
+- **Left for a human with a unit:** a bricked-unit volunteer to validate the loader path, and the
+  captures in [HARDWARE_RE_CAPTURE.md](HARDWARE_RE_CAPTURE.md).
 
 ## 4. Status and next steps (updated 2026-11-09)
 
@@ -158,11 +161,11 @@ without a backup; D0/D1 are destructive.
 - Data model hints: `LF_Config.AllowExtSyncPreset / …IAState / …Save`, `LF_Preset.ExtSyncDeviceType /
   ExtSyncPresetValue`.
 
-### 5c. Firmware (REA entropy + local decode)
-REA entropy on the decoded 12+ v6.32 image: 6.51 bits overall, flat 6.0–6.5 per 4 KB block, no
-low-entropy "code vs. data" regions — scrambled/encoded but **not** compressed or strongly
-encrypted. Cracking the scrambler is the blocker; it needs a disassembler on a plausible
-plaintext, i.e. REA with **Ghidra 12.1.4** (download not yet approved).
+### 5c. Firmware entropy (REA)
+REA's `inspect-byte-entropy` on the nibble-decoded 12+ v6.32 image: 6.51 bits overall, flat 6.0–6.5 per
+4 KB block. That ruled out compression/strong encryption and was consistent with the XOR-5 + PIC18
+result in §5g (the 55/AA "runs" are just `00`/`FF` flash filler after XOR). REA's `inspect-firmware-regions`
+needs Linux + binwalk and was not usable here.
 
 ### 5d. "Update Internal Data" — protocol and payload (decompiled)
 `Window1.Set_All_Firmware_Data_effects(MemoryBlock)` (called from the Hardware menu handler with
