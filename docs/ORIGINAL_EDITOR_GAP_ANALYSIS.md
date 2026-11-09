@@ -35,6 +35,16 @@ Ghidra, and Ghidra's PIC-18 module. **Nothing here was run against a real unit.*
 
 ## 1. Original v6.31 menu tree (recovered from the binary) vs. the rebuild
 
+> **Verified live (2026-11-09):** this tree was recovered statically from the binary and then confirmed
+> against the *running* v6.31 Mac editor through the macOS accessibility menu API (top-level menus and
+> every item of File, Edit, Utilities, Hardware, Reports, Complete Transfers and Settings match).
+> Findings from the live check: **File → "Filter / Export Data"** is the selective export window
+> (`WindowExportData`); the original's **Complete Transfers** has only *Get ALL* / *Send ALL* — our
+> *Send Edits* is an addition; the original's Hardware menu has no Connect/Get/Send items (those live in
+> Complete Transfers and the window's CONNECT control). The window's own controls are **not**
+> accessibility-visible (3 of 105 AX nodes), so REA's `observe-native-ui` / `capture-native-ui-scenario`
+> can only add a screenshot, and they additionally need macOS Screen Recording granted to the REA host.
+
 | Menu | Original item | Rebuild |
 |---|---|---|
 | File | Open / Save / Load Factory Defaults (Mini, JR+, 12+, Pro+) | ✅ |
