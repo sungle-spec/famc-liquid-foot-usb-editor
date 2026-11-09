@@ -114,9 +114,10 @@ builders added. Remaining, in value order:
 
 1. **Hardware captures** ([HARDWARE_RE_CAPTURE.md](HARDWARE_RE_CAPTURE.md)): Simulator, `CB` vs `CF`,
    Update Internal Data, Axe-Fx/Kemper sync exchange. Nothing destructive is enabled without them.
-2. **External Device Sync (Axe-Fx / Kemper import)** — option strings, modes and routines are known
-   (`WindowExtSyncParams`: `AXE_SYNC`/`KEMPER_SYNC` are empty stubs; the work is in
-   `LoadExternalData_*` / `AXE_SYNC_QuickProgram`, decompiles still pending) — needs an external unit to test.
+2. **External Device Sync (Axe-Fx / Kemper import)** — option strings, modes and the external-device
+   request frames are known (§5j). `WindowExtSyncParams.AXE_SYNC` / `KEMPER_SYNC` / `LoadExternalData_*`
+   decompile to empty stubs; the logic sits in the window's button handlers and `AXE_SYNC_QuickProgram`.
+   Needs an Axe-Fx or Kemper on the bench to build and test.
 3. **External Device Definitions** file format; selective **Export Data** dialog; **Undo/Redo**; open-file
    stats; release-notes window — host-side, no hardware.
 4. **Custom firmware** — technically possible (no signature, 16-bit sum only) but brick-risk and
@@ -240,3 +241,20 @@ the original editor shows **no firmware setting the editor is missing**:
 Tests pin the exact bytes and assert no app module references the destructive builders
 (`tests/test_protocol_original_frames.py`). These are **static-analysis results, not
 hardware-confirmed**; enabling any of them still needs a capture of the original editor on a unit.
+
+### 5j. External-device sync — request frames recovered (decompiled)
+Sent over the LF+ serial link (`SerialPortLF`) by `Window1.AXE_*` / `KEMPER_*`; the LF+ editor drives
+the external unit through the LF+ in "Editor Mode". Bytes are literal except where noted.
+
+| Routine | Frame | Notes |
+|---|---|---|
+| `AXE_READ_EFFECTS_STATES_AXE3` | `F0 00 01 74 10 13 06 F7` | Fractal mfr `00 01 74`, model `10` = Axe-Fx III, fn `13`; the trailing `06` is the **Fractal checksum = XOR of all bytes before it, & 0x7F** (verified by hand). fn `13` matches the public III "status dump" request |
+| `AXE_DEVICE_msg_SceneName` | `F0 00 01 74 <model> 0E <…computed…> F7` | fn `0E`; model byte and scene arguments/checksum are filled in at runtime |
+| `AXE_DEVICE_msg_PresetName` / `_SceneTrigger` | fn `0D` / `0C` with the same envelope | from the frame table in §5a |
+| `KEMPER_DEVICE_READ_PRESET` | `F0 00 20 33 02 7F 7E 00 40 02 3B 7F F7` | Kemper mfr `00 20 33`, product `02` (KPA), device `7F` (any), fn `7E`; remaining bytes are the address/request fields, taken as literal |
+| `KEMPER_DEVICE_FOUND` | same envelope, `…40 00 3B 7F` and `…40 02 3B 7F` | two probes sent back-to-back to detect a KPA |
+
+Caveats: model byte / scene number / checksum are computed, not literals (except the III status
+dump, which is fully literal and checksum-verified). The external unit's *replies* and the full
+import state machine are not recovered statically — capture them with the original editor and an
+Axe-Fx III / Kemper (see [HARDWARE_RE_CAPTURE.md](HARDWARE_RE_CAPTURE.md)).
