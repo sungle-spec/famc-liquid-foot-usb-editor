@@ -70,6 +70,9 @@ def _grid_host(spacing: int = 2):
 
 class Field:
     label = ""
+    # Record types whose *names* this field displays (see lfeditor/name_sync.py); the window
+    # re-resolves such fields when one of those records is renamed.
+    name_types: tuple = ()
 
     def build(self) -> QWidget: ...
     def load(self, values: list[int]) -> None: ...
@@ -637,6 +640,10 @@ class SlotPickerField(Field):
         self.unused_raw, self.unused_label, self.cols = unused_raw, unused_label, cols
         self._items: list[tuple[int | None, str]] = []  # (stored_index_or_None, display)
 
+    @property
+    def name_types(self) -> tuple:
+        return (self.target_type,)
+
     def build(self):
         self.w, grid = _grid_host()
         self.combos: list[QComboBox] = []
@@ -822,6 +829,8 @@ class IAStateGridField(Field):
     """Preset 'MAP Label / Initial IA-Slot States' — a scrollable list of all 60 IA slots,
     each showing `NN- [###]Name` (name resolved from the dump's IA-switch records) and a green
     On / red Off toggle bound to the preset's initial-IA bitfield at `start` (bit per slot)."""
+
+    name_types = (3,)   # IA-switch records
 
     def __init__(self, start: int, count: int, label: str):
         super().__init__()

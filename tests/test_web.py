@@ -159,3 +159,15 @@ def test_session_quickprog_and_reorder():
     perm = s.move_record(1, 2, 5, True)
     assert isinstance(perm, dict) and perm
     assert len(s.save()) == len(pathlib.Path(FACTORY).read_bytes())
+
+
+def test_web_names_reflect_a_rename_immediately():
+    """The web editor re-reads names from the live document each time a tab renders, so an IA-Slot
+    rename is visible on the IA-Maps/Pages tabs with no extra refresh step (unlike the desktop
+    app's cached pickers — see lfeditor/name_sync.py)."""
+    from lfeditor.webapi import Session
+    s = Session()
+    s.load(open(FACTORY, "rb").read())
+    s.set_str(3, 0, 0, 16, "ZZ TEST")
+    assert s.names(3)[0].endswith("ZZ TEST")
+    assert s.raw_names(3)[0] == "ZZ TEST"

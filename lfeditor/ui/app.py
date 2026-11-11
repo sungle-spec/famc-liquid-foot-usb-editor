@@ -5,8 +5,8 @@ import os
 import shutil
 from datetime import datetime
 
-from PySide6.QtCore import Qt, QThread, QSettings, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import Qt, QThread, QSettings, QTimer, Signal
+from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QToolBar, QFileDialog, QMessageBox, QLabel, QWidget,
     QProgressBar,
@@ -50,6 +50,8 @@ class _Emitter:
 
 
 # Tab order matches the original editor (two rows there; one bar here).
+from .. import name_sync
+
 TAB_ORDER = [
     "Presets", "Set-List", "IA-Slot", "IA-Maps", "Midi/Groups", "Global",
     "Songs", "Pages", "Sysex Msgs", "Exp Pedals", "Colors",
@@ -70,6 +72,12 @@ class MainWindow(QMainWindow):
         self._midi_bridge_wizard = None  # the non-modal USB MIDI Bridge Setup checklist window
         self._device_busy = False  # True while a _DeviceTask transfer runs (bridge pauses)
         self._settings = QSettings("FAMC", "LFPlusEditor")
+        # IA-Slot / Page name propagation (see lfeditor/name_sync.py)
+        self._name_sig = None
+        self._name_timer = QTimer(self)
+        self._name_timer.setSingleShot(True)
+        self._name_timer.setInterval(name_sync.AUTO_DELAY_MS)
+        self._name_timer.timeout.connect(self._on_name_timer)
 
         self.setWindowTitle("LF+ Editor (native)")
         self.setMinimumSize(1024, 680)
@@ -93,6 +101,7 @@ class MainWindow(QMainWindow):
         self.qlist.visibilityChanged.connect(
             lambda vis: self.act_qlist.setChecked(vis) if self.act_qlist.isChecked() != vis else None)
         self.tabs.currentChanged.connect(self._sync_qlist)
+        self.tabs.currentChanged.connect(lambda _i: self._on_tab_changed_names())
         self.act_qlist.setChecked(True)   # show the dock; rails are hidden, this is the navigator
         self._sync_qlist()
 
@@ -167,6 +176,11 @@ class MainWindow(QMainWindow):
         editm.addAction(self.act_paste)
         editm.addAction(self.act_find)
         editm.addAction("Clear Current Record…", self.clear_record)
+        self.act_refresh_names = editm.addAction("Refresh Names", self._manual_refresh_names)
+        self.act_refresh_names.setToolTip(
+            "Update IA-Slot and Page names everywhere they are listed (IA-Maps, Presets, Pages) — "
+            "available in every Name-updates mode.")
+        editm.setToolTipsVisible(True)
         editm.addSeparator()
         editm.addAction("Clear Preset Labels…", lambda: self.clear_labels(9, "Preset Labels"))
         editm.addAction("Clear Preset MAP Labels…",
@@ -227,6 +241,18 @@ class MainWindow(QMainWindow):
         self.act_raw.toggled.connect(self._toggle_raw)
         setm.addAction(self.act_raw)
         setm.addAction(self.act_qlist)   # Q-LIST show/hide (also a toolbar toggle)
+        nm = setm.addMenu("Name updates (IA-Slot / Page)")
+        self._name_mode_group = QActionGroup(self)
+        self._name_mode_group.setExclusive(True)
+        self._name_mode_actions = {}
+        current = self.name_sync_mode()
+        for mode in name_sync.MODES:
+            act = QAction(name_sync.MODE_LABELS[mode], self, checkable=True)
+            act.setChecked(mode == current)
+            act.triggered.connect(lambda _c=False, m=mode: self.set_name_sync_mode(m))
+            self._name_mode_group.addAction(act)
+            nm.addAction(act)
+            self._name_mode_actions[mode] = act
 
         # ---- Help ----
         helpm = bar.addMenu("Help")
@@ -273,6 +299,61 @@ class MainWindow(QMainWindow):
         """Re-bind every tab to the current dump (after records were replaced or bulk-edited)."""
         for w in self.tab_widgets:
             w.set_dump(self.dump)
+        self._name_sig = name_sync.names_signature(self.dump) if self.dump is not None else None
+
+    # --- IA-Slot / Page name propagation (Settings ▸ Name updates; Edit ▸ Refresh Names) ---
+    def name_sync_mode(self) -> str:
+        return name_sync.normalize_mode(self._settings.value(name_sync.SETTINGS_KEY))
+
+    def set_name_sync_mode(self, mode: str) -> None:
+        mode = name_sync.normalize_mode(mode)
+        self._settings.setValue(name_sync.SETTINGS_KEY, mode)
+        for m, act in self._name_mode_actions.items():
+            if act.isChecked() != (m == mode):
+                act.setChecked(m == mode)
+        if mode != name_sync.MODE_AUTO:
+            self._name_timer.stop()
+        else:
+            self.refresh_record_names(only_if_changed=True)   # catch up on edits made meanwhile
+
+    def note_names_edit(self) -> None:
+        """A tab reports that an IA-Slot/Page record may have been renamed. Only Automatic mode
+        reacts (after a short quiet period, so typing doesn't rebuild 3,600 dropdown items per key)."""
+        if self.name_sync_mode() == name_sync.MODE_AUTO:
+            self._name_timer.start()
+
+    def refresh_record_names(self, only_if_changed: bool = False) -> bool:
+        """Push current IA-Slot and Page names into every tab that lists them. Returns True if
+        anything was refreshed. `only_if_changed` skips the work when no name differs."""
+        if self.dump is None:
+            return False
+        sig = name_sync.names_signature(self.dump)
+        if only_if_changed and sig == self._name_sig:
+            return False
+        for w in self.tab_widgets:
+            refresh = getattr(w, "refresh_names", None)
+            if refresh is not None:
+                refresh(self.dump, name_sync.NAME_TYPES)
+        self._name_sig = sig
+        return True
+
+    def _on_name_timer(self):
+        if self.name_sync_mode() == name_sync.MODE_AUTO:   # defensive: never act outside Automatic
+            self.refresh_record_names(only_if_changed=True)
+
+    def _manual_refresh_names(self):
+        if self.dump is None:
+            self.statusBar().showMessage("Open a file first", 4000)
+            return
+        self._name_timer.stop()
+        self.refresh_record_names()
+        self.statusBar().showMessage("IA-Slot and Page names refreshed", 4000)
+
+    def _on_tab_changed_names(self):
+        """Automatic mode: a rename must be visible the moment you switch to a tab that lists it."""
+        if self.name_sync_mode() == name_sync.MODE_AUTO:
+            self._name_timer.stop()
+            self.refresh_record_names(only_if_changed=True)
 
     def refresh_channel_names(self):
         """Call after a live MIDI-channel-name edit on the Midi/Groups tab: other tabs' MIDI

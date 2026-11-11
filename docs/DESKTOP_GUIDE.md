@@ -79,12 +79,12 @@ it, or drop an **IA-Slot** onto a command-table row to write an "IA ON Trig" com
 | Menu | Items |
 |---|---|
 | **File** | Open… · Save · Backup (Save As)… · Load Factory Defaults into Editor ▸ (Mini / JR+ / 12/12+ / Pro+) · Load Special Factory Programming ▸ (Axe-Fx II Basic / Axe-Fx III Basic / Kemper / Kemper Performance) · Import from CSV ▸ / Export to CSV ▸ (Presets · Songs · Set-Lists · Sysex) · About / License |
-| **Edit** | Copy · Paste · Find… · Clear Current Record… · Clear Preset Labels… · Clear Preset MAP Labels… · Clear Song Preset Labels… |
+| **Edit** | Copy · Paste · Find… · Clear Current Record… · Refresh Names · Clear Preset Labels… · Clear Preset MAP Labels… · Clear Song Preset Labels… |
 | **Utilities** | Quick Repeated Command Programmer… · Re-order Records (Save / Sync)… · MIDI Monitor / Pass-Thru… |
 | **Hardware** | Device Connection Setup… (EEPROM wizard) · Connect / Disconnect · Get All from LF+ · Send Edits to LF+ · Send All to LF+ · *(Reset Config / Reset to Factory / Load Firmware are visible but disabled — device resets and firmware flashing are deliberately not enabled)* |
 | **Reports** | Preset report… · Song report… · Set-List report… — human-readable CSV summaries with references resolved to names |
 | **Complete Transfers** | Get All from LF+ · Send Edits to LF+ (only changed records) · Send All to LF+ (writes every record in the open file — restores a `.syx` backup) |
-| **Settings** | Show raw bytes · Q-LIST |
+| **Settings** | Show raw bytes · Q-LIST · Name updates (IA-Slot / Page) |
 | **Help** | About / License |
 
 The three **Clear … Labels** items blank a whole class of text-label records in the open
@@ -168,6 +168,22 @@ On **Pages**, the board shows 12 buttons at a time exactly as the hardware arran
 (`Empty / Preset / Function / IA Slot / Page Select`) plus a **Value** listed by name. **Drag a
 tile onto another to swap the two buttons** (Shift-drag copies). The page-group navigator on
 the right flips between button groups 1–12 / 13–24 / … / 49–60.
+
+### Keep IA-Slot and Page names current
+
+The IA-Maps tab, the Preset tab's IA-state list and the Pages tab's *IA Slot* / *Page Select*
+dropdowns list records by name. By default (the original behaviour) they only pick up a rename
+when a file is (re)loaded. **Settings ▸ Name updates (IA-Slot / Page)** lets you choose:
+
+- **Original** *(default)* — names update only when a file is loaded.
+- **Automatic** — a rename shows up everywhere shortly after you stop typing, and the moment you
+  switch tabs.
+- **Manual** — names update only when you choose **Edit ▸ Refresh Names**.
+
+**Edit ▸ Refresh Names** works in every mode, so you can stay on Original and refresh on demand.
+Refreshing never changes any stored byte; each dropdown keeps the value it had. The choice is
+remembered between sessions. (The web editor needs no setting: it reads names fresh each time a
+tab is shown.)
 
 ### Find anything — by name or by what it sends
 

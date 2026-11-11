@@ -24,7 +24,7 @@ editor and connect your LF+ in minutes.
 
 ## Status
 
-Feature-complete for offline editing and host-side workflow; **503 tests pass**. The remaining work
+Feature-complete for offline editing and host-side workflow; **515 tests pass**. The remaining work
 is device-side (gated resets, Update Internal Data, Simulator Mode) and Axe-Fx/Kemper sync import —
 all of which need captures of the original editor on a real unit. See `docs/` for the
 reverse-engineering write-up and
@@ -36,7 +36,7 @@ original Mac/Windows editor and the firmware (what we match, what is left, and w
 | P0 — Repo & tooling | ✅ done |
 | P1 — Protocol RE (decompile JAR, decode sysex dumps) | ✅ wire format cracked, byte-exact round-trip |
 | P2 — UI capture of all 11 tabs | ✅ [docs/LF_UI_MAP.md](docs/LF_UI_MAP.md) + tab captures in [docs/ui/](docs/ui/) |
-| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 503 tests total |
+| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 515 tests total |
 | P4 — App shell + Presets tab | ✅ runnable (`python -m lfeditor`) |
 | P5 — Remaining tabs | ✅ all 11 tabs; **data model complete** — every user-facing control mapped (extension records, command tables, full Config: LCD/Extender/Tap-Tempo/Combo, exp-pedals, colours) |
 | P6 — Device comms (USB-serial + MIDI) | ✅ **record read/write + bidirectional live USB MIDI confirmed on real hardware**; see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md) |

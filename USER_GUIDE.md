@@ -137,7 +137,9 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   for firmware use the separate [Firmware Loader](docs/FIRMWARE_LOADER.md)).
 - **Complete Transfers** — Get All from LF+ / **Send Edits to LF+** (only the records you changed) / **Send All to LF+** (writes every record in the open file, so a `.syx` backup can be restored). Long sends show a progress bar plus *Sending N of M (p%) · record · elapsed · ~time left* in the status bar.
 - **Settings** — **Show raw bytes** toggles the raw-decoded-values table on every tab (off by
-  default).
+  default). **Name updates (IA-Slot / Page)** chooses when renamed IA-Slots/Pages appear in the
+  IA-Maps, Preset and Pages dropdowns: *Original* (on file load only — the default), *Automatic*,
+  or *Manual* (use **Edit ▸ Refresh Names**, which works in every mode).
 
 ### What each tab edits
 

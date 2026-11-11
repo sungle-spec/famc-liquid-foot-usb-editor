@@ -241,6 +241,26 @@ class SectionedTab(QWidget):
     def _on_edit(self):
         self.window().mark_dirty()
         self.rail.set_records(self._records)  # refresh name labels
+        self._note_names()
+
+    def _note_names(self) -> None:
+        """Tell the window a record whose name other tabs display may have changed (it decides,
+        from the user's Name-updates setting, whether/when to propagate)."""
+        from ...name_sync import NAME_TYPES
+        if self.type_ in NAME_TYPES:
+            note = getattr(self.window(), "note_names_edit", None)
+            if note is not None:
+                note()
+
+    def refresh_names(self, dump, types) -> None:
+        """Re-resolve fields that list records of `types` by name, keeping the current record's
+        values selected (set_context rebuilds their option lists, so re-load afterwards)."""
+        vals = self._rec.values if self._rec is not None else None
+        for f in self._all_fields:
+            if set(f.name_types) & set(types):
+                f.set_context(dump)
+                if vals is not None:
+                    f.load(vals)
 
     def _do_transfer(self, kind: str):
         if self._on_transfer and self._rec is not None:
@@ -259,3 +279,4 @@ class SectionedTab(QWidget):
             idx = self._records.index(self._rec)
             self.rail.set_records(self._records)  # refresh labels (selection preserved)
             self._show(idx)
+            self._note_names()

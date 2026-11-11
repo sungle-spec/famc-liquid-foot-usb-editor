@@ -30,6 +30,7 @@ from ...model.page import (
     decode_button_function, PAGE_SYSTEM_FUNCTIONS,
 )
 from ...model.config import COLOR_NAMES
+from ...name_sync import ia_names, page_names
 
 GROUP_SIZE = 12          # one page-group = 12 physical buttons (4 cols × 3 rows)
 NUM_GROUPS = NUM_BUTTONS // GROUP_SIZE  # 5 groups, start values 1/13/25/37/49
@@ -364,13 +365,21 @@ class PagesTab(QWidget):
     def set_dump(self, dump) -> None:
         self._records = dump.records(self.type_)
         self._presets = [(getattr(r, "name", "") or "").strip() for r in dump.presets]
-        self._ia = [(getattr(r, "name", "") or "").strip() for r in dump.records(3)]
-        self._page_names = [((getattr(r, "nick", "") or getattr(r, "name", "") or "").strip())
-                            for r in self._records]
+        self._ia = ia_names(dump)
+        self._page_names = page_names(dump)
         self.rail.set_records(self._records)
         self.header.set_count(len(self._records))
         if self._records:
             self.rail.list.setCurrentRow(0)
+
+    def refresh_names(self, dump, types) -> None:
+        """Re-read IA-Slot / Page names (see lfeditor/name_sync.py) and redraw the button tiles and
+        the Function 1/2 value dropdowns, keeping the selected button and its function values."""
+        self._ia = ia_names(dump)
+        self._page_names = page_names(dump)
+        if self._rec is not None:
+            self._refresh_board()
+            self._select(self._sel)
 
     def _goto(self, idx):
         if 0 <= idx < len(self._records):
@@ -401,6 +410,9 @@ class PagesTab(QWidget):
         if self._rec is not None and self._rec in self._records:
             self._show(self._records.index(self._rec))
             self.rail.set_records(self._records)
+            note = getattr(self.window(), "note_names_edit", None)
+            if note is not None:
+                note()
 
     def _set_group(self, g: int):
         self._group = g
@@ -555,6 +567,9 @@ class PagesTab(QWidget):
     def _mark(self):
         self.window().mark_dirty()
         self.rail.set_records(self._records)
+        note = getattr(self.window(), "note_names_edit", None)
+        if note is not None:
+            note()
 
     def _transfer(self, kind):
         if self._on_transfer and self._rec is not None:
