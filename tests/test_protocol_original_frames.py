@@ -55,5 +55,5 @@ def test_no_app_code_sends_the_destructive_frames():
     for path in root.rglob("*.py"):
         if path.name == "protocol.py":
             continue
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         assert "reset_config_frame" not in text and "reset_factory_frame" not in text, path

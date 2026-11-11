@@ -103,6 +103,9 @@ def _install_start_fakes(monkeypatch, serial, midi_in=None, midi_out=None):
     monkeypatch.setattr(comms, "find_serial_ports", lambda: [SimpleNamespace(name="/dev/fake")])
     monkeypatch.setattr(comms, "SerialTransport", lambda _name: serial)
     monkeypatch.setattr(bridge_module.time, "sleep", lambda _seconds: None)
+    # These tests drive the virtual-port path; Windows can't create virtual ports and would
+    # default the dialog to "existing endpoints" (platform behaviour is covered separately).
+    monkeypatch.setattr(bridge_module, "sys", SimpleNamespace(platform="linux"))
     monkeypatch.setattr(mido, "open_input", lambda *_a, **_k: midi_in)
     monkeypatch.setattr(mido, "open_output", lambda *_a, **_k: midi_out)
     monkeypatch.setattr(QMessageBox, "warning", lambda *_a, **_k: QMessageBox.Ok)

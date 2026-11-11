@@ -11,6 +11,16 @@ from lfeditor.model.sync_effects import (
 )
 
 FACTORY = Path(__file__).resolve().parent.parent / "reference" / "factory_syx"
+
+
+def _factory(name):
+    """reference/ is gitignored (not on CI runners): skip rather than fail when it's absent."""
+    path = FACTORY / name
+    if not path.exists():
+        pytest.skip(f"{path} not present (reference/ is local-only)")
+    return path
+
+
 _norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())  # noqa: E731
 
 
@@ -35,7 +45,7 @@ def test_out_of_range_is_none():
     ("Factory_DefaultsAXEFX", 3, 0.8),
 ])
 def test_factory_slots_resolve_to_their_own_names(fname, device, min_hit):
-    d = Dump.from_file(FACTORY / f"{fname}.syx")
+    d = Dump.from_file(_factory(f"{fname}.syx"))
     slots = []
     for fr in d.ia_switches:
         r = wrap(fr)
@@ -52,7 +62,7 @@ def test_factory_slots_resolve_to_their_own_names(fname, device, min_hit):
 
 
 def _kemper_slots(fname):
-    d = Dump.from_file(FACTORY / f"{fname}.syx")
+    d = Dump.from_file(_factory(f"{fname}.syx"))
     out = []
     for fr in d.ia_switches:
         r = wrap(fr)
