@@ -107,8 +107,10 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
   original LF+ Editor's export exactly, so old exported templates load too. **About / License**
   (in **File** and **Help**) opens a dialog with the version, the full MIT **License**, and a
   **Legal & Safety** notice.
-- **Reports** — **Preset / Song / Set-List report**: write a read-only, human-readable CSV summary
-  (cross-references resolved to names — e.g. each song's assigned presets by name).
+- **Reports** — **Preset / Song / Set-List / IA-Slot / IA-Map report**: write a read-only, human-readable CSV summary
+  (cross-references resolved to names — e.g. each song's assigned presets by name). The IA-Slot
+  report also lists each slot's decoded ON/BYPASS commands; the IA-Map report lists the slot each
+  of the 60 buttons triggers.
 - **Utilities** —
   - **Quick Repeated Command Programmer**: write one command (MIDI or IA-trigger) into a chosen
     programming **row** across a **range** of records (preset / song / IA-Slot ON / IA-Slot Bypass

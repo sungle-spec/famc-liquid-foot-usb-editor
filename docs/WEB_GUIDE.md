@@ -252,7 +252,7 @@ editor's column format** — old exports load too. Edit names and slot assignmen
 spreadsheet, then **Tools… → Import CSV…** to apply. Imports are surgical: one changed row
 changes one record.
 
-**Tools… → Preset / Song / Set-List report…** downloads a human-readable summary with
+**Tools… → Preset / Song / Set-List / IA-Slot / IA-Map report…** downloads a human-readable summary with
 cross-references resolved to names (each song's presets by name, etc.) — great for a printed
 rig sheet.
 

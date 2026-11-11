@@ -149,6 +149,8 @@ def test_session_csv_and_reports_roundtrip():
     assert res["applied"] >= 1
     assert s.get_str(1, 0, 0, 16).strip() == "CSVNAME"
     assert s.report_text("presets").splitlines()[0].startswith("Num")
+    assert s.report_text("iaslots").splitlines()[0].startswith("Num,Name,Nickname,Enabled")
+    assert s.report_text("iamaps").splitlines()[0].startswith("Num,Name,Nickname,Remapped buttons")
 
 
 def test_session_quickprog_and_reorder():

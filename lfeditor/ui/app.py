@@ -224,6 +224,8 @@ class MainWindow(QMainWindow):
         rep.addAction("Preset report…", lambda: self.save_report("presets", "Preset"))
         rep.addAction("Song report…", lambda: self.save_report("songs", "Song"))
         rep.addAction("Set-List report…", lambda: self.save_report("setlists", "Set-List"))
+        rep.addAction("IA-Slot report…", lambda: self.save_report("iaslots", "IA-Slot"))
+        rep.addAction("IA-Map report…", lambda: self.save_report("iamaps", "IA-Map"))
 
         # ---- Complete Transfers ----
         ct = bar.addMenu("Complete Transfers")

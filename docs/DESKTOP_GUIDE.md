@@ -82,7 +82,7 @@ it, or drop an **IA-Slot** onto a command-table row to write an "IA ON Trig" com
 | **Edit** | Copy · Paste · Find… · Clear Current Record… · Refresh Names · Clear Preset Labels… · Clear Preset MAP Labels… · Clear Song Preset Labels… |
 | **Utilities** | Quick Repeated Command Programmer… · Re-order Records (Save / Sync)… · MIDI Monitor / Pass-Thru… |
 | **Hardware** | Device Connection Setup… (EEPROM wizard) · Connect / Disconnect · Get All from LF+ · Send Edits to LF+ · Send All to LF+ · *(Reset Config / Reset to Factory / Load Firmware are visible but disabled — device resets and firmware flashing are deliberately not enabled)* |
-| **Reports** | Preset report… · Song report… · Set-List report… — human-readable CSV summaries with references resolved to names |
+| **Reports** | Preset report… · Song report… · Set-List report… · IA-Slot report… · IA-Map report… — human-readable CSV summaries with references resolved to names |
 | **Complete Transfers** | Get All from LF+ · Send Edits to LF+ (only changed records) · Send All to LF+ (writes every record in the open file — restores a `.syx` backup) |
 | **Settings** | Show raw bytes · Q-LIST · Name updates (IA-Slot / Page) |
 | **Help** | About / License |
@@ -213,6 +213,11 @@ are draggable onto slots, same as Q-LIST entries.
 format the original editor used (its old exports import here too). Edit in any spreadsheet,
 **File → Import from CSV ▸** to apply — one changed row edits one record.
 **Reports** are the read-only cousins: cross-referenced, name-resolved summaries for printing.
+The **IA-Slot report** has one row per slot — enabled, switch type, group, sync device/effect,
+colours, step names, and every ON and BYPASS command decoded (`1. CC ch1 #7 = 100 | 2. PC ch2 → prog 5`,
+numbered by table row) — handy for documenting a rig or studio's commands in a spreadsheet. The
+**IA-Map report** has one row per map, with the IA-Slot (`number: name`) each of the 60 buttons
+triggers, plus a count of buttons that differ from the default map.
 
 ---
 
