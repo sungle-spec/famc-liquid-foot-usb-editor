@@ -21,7 +21,7 @@ Legend: ✅ matches · ⚠️ partial · ❌ not yet ported · 🔌 deferred (ne
 | 7 | Songs | `specs._songs_tab` | schema | ✅ slot picker + LCD labels + command table + params |
 | 8 | Pages | `tabs/pages_tab.py` (bespoke) | `renderPages` | ✅ 12-button bottom-up board, Page Groups navigator, switch glyphs, drag-swap (Shift=copy), Page Parameters + Button Definition |
 | 9 | Sysex Msgs | `specs._sysex_tab` | schema | ✅ hex grid + Pre/Post links + Auto-Create MMC |
-| 10 | Exp Pedals | `specs._exp_pedals_tab` (GlobalSpec) | schema | ✅ 4 pedal-config columns · ⚠️ no live-calibration strip (🔌) |
+| 10 | Exp Pedals | `specs._exp_pedals_tab` (GlobalSpec) | schema + `livecal.js` | 4 pedal-config columns; live-calibration dialog implemented over WebSerial (hardware coverage is separate) |
 | 11 | Colors | `specs._colors_tab` | schema | ✅ 4-col Function Button Colors + Preset Button Colors |
 
 Every `Field` subclass in `fields.py` has a web renderer (`schema.KIND` + `render.js` `buildField`):
@@ -57,13 +57,16 @@ and **hover tooltips** on every control from the same curated `ui/help_text.py` 
 | **Raw byte view** toggle | ✅ | ✅ | bottom panel, idx/dec/hex |
 | **Multi-apply toggle** (right-click → apply across N records) | ✅ | ✅ | right-click any record-tab LED |
 | **CSV import / export** | ✅ | ✅ | reuses `csvio.py`; browser upload/download |
-| **Reports** (preset/song/set-list) | ✅ | ✅ | reuses `csvio.report_text`; download |
+| **Reports** (preset/song/set-list/IA-slot/IA-map) | ✅ | ✅ | reuses `csvio.report_text`; download |
 | **Quick Repeated Command Programmer** | ✅ | ✅ | reuses `quickprog.py` |
 | **Re-order Records** | ✅ | ✅ | reuses `reorder.py` (with ref-sync) |
 | Drag-drop slot assign (Q-LIST → slot/command) | ✅ | ✅ | Q-LIST items drag onto slot pickers + command rows; Pages tile drag-swap |
 | Device I/O: Connect + From/To LF+ | ✅ (USB-serial) | ✅ | WebSerial (`web/serial.js` + `webapi.dev_*`); hardware-verified 2026-07-13, write gated. See [WEBSERIAL.md](WEBSERIAL.md) |
 | IA-Slot **Sync effect follows Sync device** (Axe-Fx III / II / Kemper tables) | ✅ | ✅ | `DependentEnumField` (desktop) · `options_by` + `lf-set` event (web); same schema |
-| Device I/O: MIDI Monitor, EEPROM wizard, live-calibration, resets | ✅ | 🔌 | not yet ported to WebSerial |
+| MIDI Monitor / Pass-Thru | implemented | implemented | web uses Web MIDI independently of WebSerial (`midimonitor.js`) |
+| Live expression-pedal calibration | implemented | implemented | web uses WebSerial (`livecal.js`); source availability does not establish hardware validation |
+| EEPROM connection wizard | implemented | not ported | desktop-only |
+| Device resets / firmware loading in the editor | disabled | unavailable | standalone beta firmware loader is separate; see [FIRMWARE_LOADER.md](FIRMWARE_LOADER.md) |
 | Device I/O: **bidirectional USB MIDI Bridge** (virtual "LF+ IN PORT/ LF+ OUT PORT" ↔ device) | ✅ | 🔌 | needs bidirectional Web MIDI ↔ WebSerial forwarding; deferred (desktop-only for now) |
 
 ## Summary
@@ -77,7 +80,9 @@ and **hover tooltips** on every control from the same curated `ui/help_text.py` 
   no drift. Q-LIST drag-onto-slot/command and the full Find / Q-LIST dialog (command filter + results
   CSV) are ported too. Both builds passed the same UAT plan — see [UAT.md](UAT.md).
 - **Device I/O**: Connect / From-To LF+ work in both (web via WebSerial, hardware-verified
-  2026-07-13). The MIDI monitor, EEPROM wizard, and live calibration remain desktop-only.
+  2026-07-13 for the then-exposed read set; see [WEBSERIAL.md](WEBSERIAL.md) for scope). Web MIDI
+  monitoring and WebSerial live calibration are implemented. The EEPROM wizard and USB MIDI
+  Bridge remain desktop-only; resets and firmware loading remain disabled in the editor.
 
 ## Parity with the *original* editor (not just desktop ↔ web)
 

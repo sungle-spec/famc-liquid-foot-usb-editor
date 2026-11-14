@@ -19,7 +19,7 @@ builds (identical steps, matching results).
   (click a row to jump), and **Export results (CSV)**.
 - Whole-record **Copy / Paste / Clear**, **Clear labels**, a **Raw byte** view, and right-click
   **multi-apply** of a toggle across a range of records.
-- **CSV** import/export and preset/song/set-list **reports**.
+- **CSV** import/export and preset/song/set-list/IA-slot/IA-map **reports**.
 - **Quick Repeated Command Programmer** and **Re-order Records**.
 - **Experimental device I/O** over [WebSerial](WEBSERIAL.md) (Chrome/Edge): Connect, From LF+, and a
   gated To LF+.
@@ -95,7 +95,12 @@ to `main`. Enable it once: **Settings → Pages → Build and deployment → Sou
 
 - **Device I/O needs Chrome/Edge** (WebSerial). Firefox and Safari have no WebSerial, so the
   Connect button is disabled there; use the desktop app to talk to hardware from those browsers.
-- The USB read set is a subset (no Songs / Set-Lists / Pages / IA-Switches), same as the desktop USB
-  path — edit those offline and save a `.syx`.
-- MIDI monitor, EEPROM wizard and live expression-pedal calibration are not yet ported to WebSerial.
-- First load fetches Pyodide (~a few MB) from the CDN; it's cached afterwards.
+- Songs, Set-Lists, Pages and IA-Switches have bulk USB reads; Songs, Set-Lists and IA-Switches
+  also have a per-record fallback when bulk replies are absent (see [WEBSERIAL.md](WEBSERIAL.md)).
+- MIDI Monitor / Pass-Thru is implemented using Web MIDI, independently of the WebSerial connection.
+  Live expression-pedal calibration is implemented using WebSerial; its presence in the source
+  does not establish hardware validation for every browser/model combination.
+- The EEPROM wizard and USB MIDI Bridge remain desktop-only. Device resets and firmware loading
+  remain disabled in the editor; the separate firmware loader is a beta tool.
+- Startup fetches Pyodide from a CDN and the Python bundle from the server. Browser caching is
+  not an offline-install mechanism; offline reloads are not guaranteed.

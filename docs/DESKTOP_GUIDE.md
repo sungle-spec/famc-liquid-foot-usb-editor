@@ -217,7 +217,7 @@ The **IA-Slot report** has one row per slot — enabled, switch type, group, syn
 colours, step names, and every ON and BYPASS command decoded (`1. CC ch1 #7 = 100 | 2. PC ch2 → prog 5`,
 numbered by table row) — handy for documenting a rig or studio's commands in a spreadsheet. The
 **IA-Map report** has one row per map, with the IA-Slot (`number: name`) each of the 60 buttons
-triggers, plus a count of buttons that differ from the default map.
+triggers, plus a count of buttons that differ from the identity mapping (button N → IA-Slot N).
 
 ---
 

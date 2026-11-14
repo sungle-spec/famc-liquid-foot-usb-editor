@@ -24,21 +24,22 @@ editor and connect your LF+ in minutes.
 
 ## Status
 
-Feature-complete for offline editing and host-side workflow; **521 tests pass**. The remaining work
-is device-side (gated resets, Update Internal Data, Simulator Mode) and Axe-Fx/Kemper sync import —
-all of which need captures of the original editor on a real unit. See `docs/` for the
-reverse-engineering write-up and
-**[docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md](docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md)** for the audit of the
-original Mac/Windows editor and the firmware (what we match, what is left, and why).
+Offline editing, desktop transfers and a browser editor are implemented. Remaining work includes
+External Device Definitions, selective export, Undo/Redo, device-side operations and external-device
+sync import; see [the original-editor gap analysis](docs/ORIGINAL_EDITOR_GAP_ANALYSIS.md).
+
+The [code and repository audit](docs/AUDIT_AND_REFACTOR.md) records the November 2026 refactor,
+regression coverage and remaining limitations. Local runs include private fixtures that are absent
+from public CI, so the two test totals differ.
 
 | Phase | State |
 |---|---|
 | P0 — Repo & tooling | ✅ done |
 | P1 — Protocol RE (decompile JAR, decode sysex dumps) | ✅ wire format cracked, byte-exact round-trip |
 | P2 — UI capture of all 11 tabs | ✅ [docs/LF_UI_MAP.md](docs/LF_UI_MAP.md) + tab captures in [docs/ui/](docs/ui/) |
-| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); 521 tests total |
+| P3 — Codec + model + round-trip tests | ✅ byte-exact round-trip on 118 real backups (fw v3.x–v6.x, all variants); private corpus tests skip in public checkouts |
 | P4 — App shell + Presets tab | ✅ runnable (`python -m lfeditor`) |
-| P5 — Remaining tabs | ✅ all 11 tabs; **data model complete** — every user-facing control mapped (extension records, command tables, full Config: LCD/Extender/Tap-Tempo/Combo, exp-pedals, colours) |
+| P5 — Remaining tabs | ✅ all 11 tabs; **mapped record fields exposed** (extension records, command tables, full Config: LCD/Extender/Tap-Tempo/Combo, exp-pedals, colours) |
 | P6 — Device comms (USB-serial + MIDI) | ✅ **record read/write + bidirectional live USB MIDI confirmed on real hardware**; see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIRECT.md) |
 | P7 — Packaging & docs | ✅ Standalone builds for **Windows / Linux / macOS** via a CI matrix (`.exe` zip · AppImage · `.app`); USER_GUIDE + [docs/BUILD.md](docs/BUILD.md) |
 | P8 — Faithful UI rebuild | ✅ all 11 tabs rebuilt to the original v6.31 layout — dark FAMC theme, per-record transfer header, titled section panels, vertical rocker toggles, green LCD fields; **Midi/Groups** (two-col channel grid), **Pages** (graphical pedalboard + page-group navigator), **Global** (5-column, every mapped Config field surfaced), **IA-Maps** (6×10 name pickers), **Set-List** (5×12), **Colors** (4-col), and extension-record label panels on **Presets**/**Songs**, **Songs MTC** (enable + Hr/Min/Sec/Frame), and **Pages** button-function labels decoded to names. Build spec captured in [docs/ui/ORIGINAL_LAYOUT.md](docs/ui/ORIGINAL_LAYOUT.md). All 11 tabs match the original v6.31 layout |
@@ -81,7 +82,8 @@ byte-for-byte; only changed records change):
 - **Toolbar icons** — Open / Save / Backup, plus **Clear / Copy / Paste** of a whole record
   (copy carries the linked label records; paste is same-type only).
 - **CSV Import/Export** (Presets / Songs / Set-Lists / Sysex) and **Reports** — column format
-  captured byte-for-byte from the original (`tests/fixtures/golden_csv/`).
+  captured from the original for the round-trippable exports (`tests/fixtures/golden_csv/`).
+  Read-only reports live in `lfeditor/reports.py`; `csvio.report_text` remains compatible.
 - **Find** (`Cmd/Ctrl+F`) — search by name (wildcards) or MIDI command (channel / type / CC#-PC#);
   double-click a result to jump; export the hit list; drag a result onto a slot picker / command row.
 - **Q-LIST** — the left-side record navigator (replaces the per-tab lists). It follows the current
@@ -101,7 +103,7 @@ byte-for-byte; only changed records change):
   uses two user-selected loopback endpoints because python-rtmidi cannot create native virtual
   ports there.
 - **Firmware / bricked units** — a standalone **[LF+ Firmware Loader (beta)](docs/FIRMWARE_LOADER.md)**
-  targets recovery of units bricked by failed firmware updates (community-tested; the editor's own
+  targets recovery of units bricked by failed firmware updates (hardware validation is still pending; the editor's own
   *Load Firmware* stays disabled until it graduates). It now verifies each image's own header, length
   and checksum and reads the model from the image; `--decode` exports the PIC18 program memory for a
   disassembler.

@@ -178,14 +178,15 @@ confirmed on a real Liquid Foot+ — see [docs/LF_USB_DIRECT.md](docs/LF_USB_DIR
 
 1. **Connect** — opens the FTDI serial port and handshakes the device into *Editor Mode* (its LCD
    shows "Editor Mode [sel] to exit"). The status bar turns green.
-2. **From LF+** — pulls the device's live records (presets + ext/song/sysex/config/IA-map) and
-   **overlays them onto the backup you have open** (Song/Set-List/Page/IA-Slot aren't exposed over
-   USB, so those stay as loaded from the file). Save a `.syx` afterwards to keep the pull.
+2. **From LF+** — pulls the device's live records, including Songs, Set-Lists, Pages and IA-Slots,
+   and **overlays them onto the backup you have open**. These four types have bulk USB read
+   commands; Songs, Set-Lists and IA-Slots also have a per-record fallback when bulk replies are
+   absent. Save a `.syx` afterwards to keep the pull.
 3. **To LF+** — writes **every record you've edited** since the last Open or From LF+ (it tracks
    changes per record), after a confirm that lists what will be written. Each write is **surgical**
    and the device acknowledges it (`F0 09 F7`). Writable types are the ones the device can read back
-   (Preset, Sysex Msg, IA-Map, and the Global/Config-backed tabs); Song/Set-List/Page/IA-Slot are
-   blocked over USB (edit them offline). Device I/O runs on a background thread, so the window stays
+   (including Song, Set-List, Page, IA-Slot and the Global/Config-backed tabs). Device I/O runs
+   on a background thread, so the window stays
    responsive (the status dot turns amber while it works).
 
 > **Disconnect** sends the *leave Editor Mode* command (`CC`) and closes the port, so the unit's
