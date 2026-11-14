@@ -17,7 +17,7 @@ Legend: ✅ matches · ⚠️ partial · ❌ not yet ported · 🔌 deferred (ne
 | 3 | IA-Slot | `specs._iaslot_tab` | schema | ✅ settings column + On/Bypass command tables |
 | 4 | IA-Maps | `specs._iamap_tab` | schema | ✅ 60-slot ×6 mapping picker |
 | 5 | Midi/Groups | `tabs/midi_groups_tab.py` (bespoke) | `renderMidiGroups` | ✅ 2×8 channel grid (BANK-spanning header, +1 col), Exclusive Group 0–180 numbers, Grouped IA config |
-| 6 | Global | `specs._global_tab` (GlobalSpec) | schema | ✅ all 5 columns/sections · ⚠️ no "Send/Get Settings" buttons (🔌) |
+| 6 | Global | `specs._global_tab` (GlobalSpec) | schema | ✅ all 5 columns/sections and Send/Get Settings buttons (WebSerial connection required) |
 | 7 | Songs | `specs._songs_tab` | schema | ✅ slot picker + LCD labels + command table + params |
 | 8 | Pages | `tabs/pages_tab.py` (bespoke) | `renderPages` | ✅ 12-button bottom-up board, Page Groups navigator, switch glyphs, drag-swap (Shift=copy), Page Parameters + Button Definition |
 | 9 | Sysex Msgs | `specs._sysex_tab` | schema | ✅ hex grid + Pre/Post links + Auto-Create MMC |

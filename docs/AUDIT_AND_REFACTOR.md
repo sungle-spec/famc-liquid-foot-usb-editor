@@ -79,6 +79,9 @@ a physical Windows desktop. This audit is not evidence of complete original-edit
 5. The two large desktop modules (`app.py`, `fields.py`) remain candidates for incremental extraction.
    This pass extracts reporting and addresses defects; it does not rewrite the entire UI framework.
 6. The Windows Fusion menu workaround still needs visual confirmation from a Windows user.
+7. CI reports that `actions/checkout@v4` and `actions/setup-python@v5` target deprecated Node 20
+   runtimes (GitHub currently forces Node 24). Upgrade the source and builds repositories' action
+   versions together in a separate CI maintenance change and validate the release workflow.
 
 ## Validation
 
@@ -97,5 +100,8 @@ Validation on macOS, 14 November 2026:
 - Relative file links checked across README, USER_GUIDE and 21 top-level docs: no missing targets.
 - `git diff --check` passed.
 
-Remote all-OS results are tracked by the audit branch's GitHub Actions run. No release was cut as
-part of this audit; the current public desktop release remains v0.0.18.
+Remote CI at audit code/documentation commit `1eb6497`: **282 passed, 170 skipped on each of
+Windows, macOS and Linux** ([run 43538478147](https://github.com/sungle-spec/famc-liquid-foot-usb-editor/actions/runs/43538478147)).
+Final follow-up changes only document these results, pin release instructions to a tested SHA and
+correct two remaining documentation descriptions. No release was cut as part of this audit; the
+current public desktop release remains v0.0.18.

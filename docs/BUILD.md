@@ -14,7 +14,8 @@ build/release workflow — and it hosts the **Releases** users download.
 
 In the builds repo: **Actions → build → Run workflow**, with
 
-- `ref` — the branch / tag / SHA of *this* repo to build (default `main`);
+- `ref` — the source ref to build (the workflow defaults to `main`). For a release, use the full
+  tested commit SHA so every OS job and the release job resolves the same source;
 - `release_tag` — optional. Set it (e.g. `v0.0.3`; it must equal `lfeditor.__version__` at that
   ref) to publish the three bundles + `SHA256SUMS.txt` as a Release on the builds repo. Leave it
   empty to just get run artifacts.
@@ -28,7 +29,11 @@ The builds repo checks this repo out anonymously (both are public) — no token 
 ## Cutting a release
 
 1. Bump `lfeditor/__init__.py::__version__` here and merge to `main`.
-2. Run the builds-repo workflow with `ref: main` and `release_tag: vX.Y.Z`.
+2. Wait for source tests on all OSes, then record the full commit SHA (`git rev-parse HEAD`).
+3. Run the builds-repo workflow with `ref: <that full SHA>` and `release_tag: vX.Y.Z`.
+
+The release tag is created in the builds repository. It does not replace the source SHA supplied
+as `ref`; retain that SHA with the release/build record.
 
 The release job re-verifies tag == version, generates one combined `SHA256SUMS.txt`, and attaches
 everything to a GitHub Release on the builds repo. Users verify with `sha256sum -c SHA256SUMS.txt`

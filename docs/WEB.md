@@ -53,7 +53,7 @@ web/index.html ─┬─ Pyodide (CDN)  ── runs the real lfeditor codec/mode
     tables (`channel_names`, `midi_msg_types`, `decode_command`) and ext-record labels.
   - tools: `copy_record`/`paste_record`/`clear_record`/`clear_labels` (`ui/record_ops.py`),
     `multi_apply`, `raw_bytes`, `find` (`search.py`), `export_text`/`import_text`/`report_text`
-    (`csvio.py`), `quick_apply` (`quickprog.py`), `move_record` (`reorder.py`).
+    (`csvio.py`; reports are implemented in `reports.py` with compatible exports), `quick_apply` (`quickprog.py`), `move_record` (`reorder.py`).
   - device: `dev_*` wrap `comms/protocol.py` (handshake/read/`.syx`-write framing) — see below.
 
   Every edit mutates a frame's decoded `values`, so `save()` re-encodes **byte-exact**, exactly like
