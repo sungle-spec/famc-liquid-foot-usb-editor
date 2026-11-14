@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from copy import deepcopy
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QThread, QSettings, QTimer, Signal
@@ -376,10 +377,14 @@ class MainWindow(QMainWindow):
         self.mark_dirty()
 
     def open_quick_prog(self):
+        if self._device_busy:
+            return
         from .quickprog_dialog import QuickProgDialog
         QuickProgDialog(self, lambda: self.dump, self._refresh_after_bulk_edit).exec()
 
     def open_reorder(self):
+        if self._device_busy:
+            return
         from .reorder_dialog import ReorderDialog
         ReorderDialog(self, lambda: self.dump, self._refresh_after_bulk_edit).exec()
 
@@ -532,6 +537,14 @@ class MainWindow(QMainWindow):
         was_busy = getattr(self, "_device_busy", False)
         self._device_busy = busy   # also prevents bridge startup during a record transfer
         if busy and not was_busy:
+            # Freeze document entry points for reads as well as writes: completion
+            # callbacks apply results and baselines to the document that started them.
+            controls = [self.tabs, self.qlist, *self.menuBar().actions()]
+            for toolbar in self.findChildren(QToolBar):
+                controls.extend(toolbar.actions())
+            self._busy_controls = [(control, control.isEnabled()) for control in controls]
+            for control, _enabled in self._busy_controls:
+                control.setEnabled(False)
             self._busy_started = time.monotonic()
             self._status_before = self.status.text()
             self.progress_bar.setRange(0, 0)       # indeterminate until the first progress step
@@ -539,6 +552,9 @@ class MainWindow(QMainWindow):
         elif not busy:
             self.progress_bar.setVisible(False)
             if was_busy:
+                for control, enabled in self._busy_controls:
+                    control.setEnabled(enabled)
+                self._busy_controls = []
                 self.status.setText(self._status_before)
         self.act_connect.setEnabled(not busy)
         self.act_from.setEnabled(not busy and self.transport is not None)
@@ -556,6 +572,9 @@ class MainWindow(QMainWindow):
         that can legitimately take minutes (e.g. the ~562-request per-record sweep), a static
         busy message is indistinguishable from a hang; see the 2026-07-16 forum report that
         turned out to be exactly this."""
+        # Menus and record headers can bypass the disabled toolbar actions.
+        if self._device_busy:
+            return
         self._set_busy(True, busy_msg)
         task = self._task = _DeviceTask(None, self)
         task._fn = (lambda: fn(_Emitter(task))) if wants_progress else fn
@@ -563,14 +582,20 @@ class MainWindow(QMainWindow):
             task.progress.connect(lambda msg: self._set_conn(msg, AMBER))
             task.steps.connect(self._on_transfer_steps)
 
-        def done(result):
-            self._set_busy(False)
-            on_ok(result)
-
         def failed(message):
-            self._set_busy(False)
-            self._refresh_conn_label()
-            QMessageBox.critical(self, fail_title, message)
+            try:
+                self._refresh_conn_label()
+                QMessageBox.critical(self, fail_title, message)
+            finally:
+                self._set_busy(False)
+
+        def done(result):
+            try:
+                on_ok(result)
+            except Exception as exc:  # callback errors must not escape the Qt slot
+                failed(str(exc))
+            finally:
+                self._set_busy(False)
 
         task.ok.connect(done)
         task.err.connect(failed)
@@ -648,6 +673,8 @@ class MainWindow(QMainWindow):
         self._run_device(work, ok, f"connecting to {os.path.basename(port)}…", "Connect failed")
 
     def disconnect_device(self):
+        if self._device_busy:
+            return
         if self.transport is not None:
             from ..comms import disconnect, MODEL_FOOT
             disconnect(self.transport, MODEL_FOOT)   # send CC (leave Editor Mode), then close
@@ -727,7 +754,7 @@ class MainWindow(QMainWindow):
         ) != QMessageBox.Yes:
             return
 
-        frames = list(changed)
+        frames = deepcopy(changed)
         self._run_device(lambda emit: self._send_all(frames, emit), self._finish_write,
                          f"writing {len(frames)} record(s)…", "To LF+ failed", wants_progress=True)
 
@@ -743,7 +770,7 @@ class MainWindow(QMainWindow):
                                    "Connect to the Liquid Foot+ first (Connect in the toolbar).")
             return
         writable = self._writable_types()
-        frames = [f for f in self.dump.frames if f.type in writable]
+        frames = deepcopy([f for f in self.dump.frames if f.type in writable])
         if not frames:
             QMessageBox.information(self, "To LF+", "The open file has no USB-writable records.")
             return
@@ -762,6 +789,8 @@ class MainWindow(QMainWindow):
 
     def open_live_calibration(self):
         """Open the live expression-pedal calibration view (treadle bars + Save Calibration)."""
+        if self._device_busy:
+            return
         if self.transport is None:
             QMessageBox.information(self, "Live Calibration",
                                     "Connect to the Liquid Foot+ first — it must be in Editor Mode.")
@@ -820,6 +849,7 @@ class MainWindow(QMainWindow):
         ) != QMessageBox.Yes:
             return
 
+        frames = deepcopy(frames)
         self._run_device(lambda emit: self._send_all(frames, emit),
                          lambda result: self._finish_write(result, f"{tname} record(s)"),
                          f"writing {len(frames)} {tname}…", "To LF+ failed", wants_progress=True)
@@ -892,6 +922,8 @@ class MainWindow(QMainWindow):
             self._add_recent_file(path)
 
     def load(self, path: str):
+        if self._device_busy:
+            return
         try:
             self.dump = Dump.from_file(path)
         except Exception as exc:  # noqa: BLE001
@@ -954,6 +986,8 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel) == QMessageBox.Yes
 
     def load_factory(self, filename: str, label: str):
+        if self._device_busy:
+            return
         from ..resources import factory_path
         if not self._confirm_discard():
             return
@@ -970,6 +1004,8 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Loaded factory defaults — {label}  (save as a new backup)")
 
     def clear_labels(self, rtype: int, what: str):
+        if self._device_busy:
+            return
         if not self.dump:
             return
         recs = self.dump.records(rtype)
@@ -1012,6 +1048,8 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Copied {label} #{rec.number} — paste over another {label}")
 
     def paste_record(self):
+        if self._device_busy:
+            return
         if not self.dump or self._record_clip is None:
             return
         tab = self._active_record_tab()
@@ -1032,6 +1070,8 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Pasted into {label} #{rec.number}")
 
     def clear_record(self):
+        if self._device_busy:
+            return
         if not self.dump:
             return
         tab = self._active_record_tab()
@@ -1069,6 +1109,8 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Exported {n} {label} record(s) → {os.path.basename(path)}")
 
     def import_records(self, kind: str, label: str):
+        if self._device_busy:
+            return
         if not self.dump:
             QMessageBox.information(self, "Import", "Open a .syx file first.")
             return
@@ -1213,6 +1255,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"LF+ Editor (native, emulates v6.31) — {name} {star}")
 
     def closeEvent(self, event):
+        if self._device_busy:
+            event.ignore()
+            self.statusBar().showMessage("Wait for the device transfer to finish before quitting", 4000)
+            return
         if not self._confirm_discard(verb="quit"):
             event.ignore()
             return

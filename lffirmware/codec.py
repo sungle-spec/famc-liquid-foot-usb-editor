@@ -72,7 +72,8 @@ class FirmwareImage:
 
 def _swap_pairs(b: bytes) -> bytes:
     out = bytearray(len(b))
-    out[0::2], out[1::2] = b[1::2], b[0::2]
+    paired = len(b) - len(b) % 2
+    out[:paired:2], out[1:paired:2] = b[1:paired:2], b[:paired:2]
     if len(b) % 2:           # odd tail has no partner; keep it in place
         out[-1] = b[-1]
     return bytes(out)

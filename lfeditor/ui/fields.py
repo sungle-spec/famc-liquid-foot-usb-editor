@@ -672,6 +672,9 @@ class SlotPickerField(Field):
             cb.clear()
             cb.addItems(texts)   # one batched call — per-item addItem is pathologically slow on Win
             cb.blockSignals(False)
+        # Channel-name refresh rebuilds these too; restore the bound selection.
+        if hasattr(self, "_values"):
+            self.load(self._values)
 
     def _stored(self, values, off):
         if self.width == 2:

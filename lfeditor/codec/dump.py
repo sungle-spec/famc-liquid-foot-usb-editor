@@ -21,16 +21,30 @@ class Dump:
     frames: list[Frame] = field(default_factory=list)
     #: bytes that appear between/around frames (none in real dumps; kept for fidelity)
     preamble: bytes = b""
+    # Preserve bytes between/after frames without ever including them in a device write.
+    # References (rather than positions or object IDs) also survive deepcopy/reordering.
+    _gaps: list[tuple[Frame, bytes]] = field(default_factory=list, repr=False, compare=False)
 
     # --- construction ---
     @classmethod
     def from_bytes(cls, data: bytes) -> "Dump":
         raw_frames = split_frames(data)
+        if not raw_frames:
+            raise ValueError("no complete FAMC records in the file")
         frames = [Frame.parse(f) for f in raw_frames]
-        # capture any leading bytes before the first F0 (should be empty)
         first = data.find(0xF0)
-        preamble = data[:first] if first > 0 else b""
-        return cls(frames=frames, preamble=preamble)
+        preamble = data[:first]
+        gaps = []
+        cursor = first
+        for frame, raw in zip(frames, raw_frames):
+            cursor += len(raw)
+            next_start = data.find(0xF0, cursor)
+            stop = len(data) if next_start < 0 else next_start
+            gaps.append((frame, data[cursor:stop]))
+            cursor = stop
+        if cursor < len(data):
+            raise ValueError("unterminated sysex frame at end of file")
+        return cls(frames=frames, preamble=preamble, _gaps=gaps)
 
     @classmethod
     def from_file(cls, path: str) -> "Dump":
@@ -40,8 +54,10 @@ class Dump:
     # --- serialisation ---
     def to_bytes(self) -> bytes:
         out = bytearray(self.preamble)
+        gaps = {id(frame): gap for frame, gap in self._gaps}
         for fr in self.frames:
             out += fr.to_bytes()
+            out += gaps.get(id(fr), b"")
         return bytes(out)
 
     def to_file(self, path: str) -> None:

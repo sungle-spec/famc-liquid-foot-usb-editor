@@ -9,6 +9,7 @@ did: image verification first, sleep inhibition during the send, and a timestamp
 from __future__ import annotations
 
 import datetime
+import hashlib
 import pathlib
 import platform
 import subprocess
@@ -93,6 +94,13 @@ def send_firmware(port_name: str, image: bytes, rep: ImageReport, log: SessionLo
     """
     import threading
 
+    # Bind the transmitted bytes to the report approved by the caller. The file may have
+    # changed since validation; reject before even opening a MIDI port.
+    if not (rep.is_known_good or rep.is_plausible):
+        raise ValueError("Firmware report is not valid")
+    if len(image) != rep.size or hashlib.sha256(image).hexdigest() != rep.sha256:
+        raise ValueError("Firmware bytes changed since validation; select and validate the image again")
+
     import mido
 
     est = estimate_seconds(len(image))
@@ -101,6 +109,7 @@ def send_firmware(port_name: str, image: bytes, rep: ImageReport, log: SessionLo
               f"identity={'KNOWN ' + str(rep.known_model) + ' v' + str(rep.known_version) if rep.is_known_good else 'UNVERIFIED'}")
     log.write(f"port: {port_name!r}; estimated DIN transfer time {est:.0f}s")
 
+    msg = mido.Message("sysex", data=list(image[1:-1]))
     inp = None
     replies: list[bytes] = []
     if listen_for_replies:
@@ -113,8 +122,12 @@ def send_firmware(port_name: str, image: bytes, rep: ImageReport, log: SessionLo
         except Exception as exc:  # noqa: BLE001 — reply capture is best-effort
             log.write(f"no input listener: {exc}")
 
-    out = mido.open_output(port_name)
-    msg = mido.Message("sysex", data=list(image[1:-1]))
+    try:
+        out = mido.open_output(port_name)
+    except BaseException:
+        if inp is not None:
+            inp.close()
+        raise
 
     stop = threading.Event()
 
@@ -152,9 +165,11 @@ def send_firmware(port_name: str, image: bytes, rep: ImageReport, log: SessionLo
     finally:
         stop.set()
         ticker.join(timeout=1)
-        out.close()
-        if inp is not None:
-            inp.close()
+        try:
+            out.close()
+        finally:
+            if inp is not None:
+                inp.close()
 
     total = time.monotonic() - t0
     log.write(f"SEND complete — total {total:.1f}s, {len(replies)} device replies")

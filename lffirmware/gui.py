@@ -182,13 +182,21 @@ class LoaderWindow(QWidget):
         self._busy = True
         self.flash.setEnabled(False)
         self.status.setText("Sending — do not touch the device or cables…")
-        image = open(self.rep.path, "rb").read()
-        log = SessionLog()
+        try:
+            with open(self.rep.path, "rb") as fh:
+                image = fh.read()
+            log = SessionLog()
+        except Exception as exc:
+            self._busy = False
+            self.status.setText(f"Cannot prepare firmware send: {exc}")
+            self.rearm()
+            return
+        port_name, report = self.port.currentText(), self.rep
         self._log = log
 
         def work():
             try:
-                res = send_firmware(self.port.currentText(), image, self.rep, log,
+                res = send_firmware(port_name, image, report, log,
                                     on_progress=lambda e, t: self._progress.emit(e, t))
                 self._finished.emit(res)
             except Exception as exc:  # noqa: BLE001 — surfaced to the user
@@ -198,6 +206,13 @@ class LoaderWindow(QWidget):
                 log.close()
 
         threading.Thread(target=work, daemon=True).start()
+
+    def closeEvent(self, event):
+        # The send worker is a daemon; quitting would interrupt an in-flight flash.
+        if self._busy:
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _on_progress(self, elapsed: float, est: float):
         self.bar.setValue(min(99, int(elapsed / max(est, 1) * 100)))
