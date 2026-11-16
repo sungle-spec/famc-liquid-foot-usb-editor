@@ -268,11 +268,10 @@ def test_pull_records_per_record_miss_streak_resets_on_a_hit():
     """A real hit resets the consecutive-miss counter — sparse-but-populated data (normal: not
     every slot need be used) must not trip the bail-out just because of scattered gaps."""
     factory = Dump.from_file(ROOT / "lfeditor" / "resources" / "factory" / "Factory_Defaults12.syx")
-    song0 = next(f for f in factory.frames if f.type == 2 and f.rec_num == 0)
-    hit = song0.to_bytes()
+    songs = {f.rec_num: f.to_bytes() for f in factory.frames if f.type == 2}
     # miss, miss, HIT, miss, miss, HIT, then the transport genuinely runs dry (3 more misses ->
     # bail-out fires there, not on the earlier scattered pairs).
-    t = FakeTransport(replies=[b"", b"", hit, b"", b"", hit])
+    t = FakeTransport(replies=[b"", b"", songs[2], b"", b"", songs[5]])
     got = protocol.pull_records_per_record(t, MODEL_FOOT, cmds=[0x0B], max_consecutive_misses=3)
     assert len(got) == 2
     assert len(t.sent) == 9   # 6 handled replies + 3 more misses before the bail-out triggers

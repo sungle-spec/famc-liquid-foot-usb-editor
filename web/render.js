@@ -46,6 +46,9 @@ const LFRender = (() => {
     return raw & 0xFF;
   }
 
+  const renderControllers = new WeakMap();
+  let renderSignal;
+
   // ---- per-kind widget builders. Each returns a DOM node bound to (type, idx). ----
   function buildField(app, type, idx, f) {
     const off = (f.offset != null) ? f.offset : f.start;
@@ -105,7 +108,7 @@ const LFRender = (() => {
             if (!sel.isConnected) { window.removeEventListener("lf-set", onSet); return; }
             const d = e.detail; if (d.t === type && d.i === idx && d.off === f.depends_on) fill();
           };
-          window.addEventListener("lf-set", onSet);
+          window.addEventListener("lf-set", onSet, { signal: renderSignal });
         }
         sel.onchange = () => { const val = parseInt(sel.value, 10); let cur = app.get(type, idx, off); let nv; if (f.nibble === "low") nv = (cur & 0xF0) | (val & 0x0F); else if (f.nibble === "high") nv = (cur & 0x0F) | ((val & 0x0F) << 4); else nv = val & 0xFF; app.set(type, idx, off, nv); };
         return sel;
@@ -213,7 +216,7 @@ const LFRender = (() => {
     }
   }
 
-  // Faithful port of ui/fields.py::CommandTableField — 5 columns (Function 120px, MIDI 78px,
+  // Faithful port of ui/fields.py::CommandTableField — 5 columns (Function 176px, MIDI 78px,
   // Cmd stretch), MIDI/Cmd only live for a "MIDI Command" function, and the byte layout follows
   // func (MIDI: b1=(type<<4)|chan, data->b2/b3).
   function buildCmdTable(app, type, idx, f) {
@@ -235,7 +238,9 @@ const LFRender = (() => {
 
       // -- Function --
       const fc = el("select");
-      for (const k of Object.keys(funcs)) { const op = el("option", null, funcs[k]); op.value = k; fc.appendChild(op); }
+      const funcHelp = f.func_help || {};
+      const tipFor = (code) => funcHelp[String(code)] ? `${funcs[String(code)]} — ${funcHelp[String(code)]}` : "";
+      for (const k of Object.keys(funcs)) { const op = el("option", null, funcs[k]); op.value = k; op.title = tipFor(k); fc.appendChild(op); }
       const ensureFunc = (code) => { if (!funcs[String(code)] && !fc.querySelector(`option[value="${code}"]`)) { const op = el("option", null, `Fn ${code}`); op.value = String(code); fc.appendChild(op); } };
       const fcd = el("td"); fcd.appendChild(fc); tr.appendChild(fcd);
 
@@ -250,7 +255,7 @@ const LFRender = (() => {
 
       // pull the current bytes into the controls (and enable/disable per function)
       const sync = () => {
-        const func = get(0); ensureFunc(func); fc.value = String(func);
+        const func = get(0); ensureFunc(func); fc.value = String(func); fc.title = tipFor(func);
         const isMidi = func === FUNC_MIDI;
         mc.disabled = !isMidi; cc.disabled = !isMidi;
         if (isMidi) {
@@ -638,6 +643,12 @@ const LFRender = (() => {
   }
 
   function renderTab(app, tab, idx, root) {
+    // Navigation may only read data, so detached listeners cannot wait for lf-set
+    // to clean themselves up. Release the previous render's listeners now.
+    renderControllers.get(root)?.abort();
+    const controller = new AbortController();
+    renderControllers.set(root, controller);
+    renderSignal = controller.signal;
     if (tab.kind === "pages") { root.appendChild(renderPages(app, tab, idx)); return; }
     if (tab.kind === "midi_groups") { root.appendChild(renderMidiGroups(app, tab, idx)); return; }
     if (tab.kind === "global") {

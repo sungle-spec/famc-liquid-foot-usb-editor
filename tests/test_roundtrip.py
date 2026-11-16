@@ -100,8 +100,15 @@ def test_command_function_map():
     assert CMD_FUNCS[21] == "IA Resend (map)"     # the real IA Resend
     assert CMD_FUNCS[56] == "IA Set Step Number"  # the real IA Set Step
     for code, name in [(2, "G-Tuner"), (4, "Sysex Send"), (8, "Page Change"), (33, "Song Change"),
-                       (38, "Device Sync"), (55, "Preset Momentary then Jump"),
+                       (38, "Device Sync"), (55, "Preset Momentary, then Jump"),
                        (66, "AXE3 Chan/State"), (67, "AXE3 Chg SCENE#")]:
+        assert CMD_FUNCS[code] == name
+    # Full original labels, not the shortened on-screen forms (user feedback: "Page Button
+    # Display" reads like an on/off switch; it is a start *index* into the page's buttons).
+    for code, name in [(48, "Page Button Display Start"), (28, "Set Status#1 LED CLR"),
+                       (54, "Page Change to Preset Default"), (15, "Preset Recall Stored"),
+                       (32, "Song # Recall Stored"), (30, "Preset Resend IA-Initial States"),
+                       (44, "IF Processing Trigger, Skip"), (16, "Preset Trig 1st Bank Preset")]:
         assert CMD_FUNCS[code] == name
     assert max(CMD_FUNCS) == 67 and len(CMD_FUNCS) == 68
 
@@ -313,3 +320,13 @@ def test_sysex_data_bytes_roundtrip():
     assert Dump.from_bytes(dump.to_bytes()).sysex_messages[0].values[24] == 0x7F
     msg.values[24:40] = Dump.from_bytes(data).sysex_messages[0].values[24:40]
     assert dump.to_bytes() == data
+
+
+def test_command_functions_have_hover_help_and_every_preset_toggle_has_help():
+    from lfeditor.model.cmd_help import CMD_FUNC_HELP, func_help
+    from lfeditor.model.preset import CMD_FUNCS, PRESET_FLAGS
+    from lfeditor.ui.help_text import tooltip_for
+    assert set(CMD_FUNC_HELP) <= set(CMD_FUNCS)
+    assert "index" in func_help(48) and "not an on/off switch" in func_help(48)
+    missing = [label for _o, _m, label in PRESET_FLAGS if not tooltip_for("Preset", label)]
+    assert not missing, missing        # e.g. "IA effects" had no pop-up help

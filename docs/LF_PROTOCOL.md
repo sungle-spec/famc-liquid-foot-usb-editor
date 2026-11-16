@@ -84,8 +84,9 @@ A full device dump is these records concatenated in type order (1,2,3,…,11), e
 > frame below (`00 <CMD> 02 …`) is **not** what the modern device wants over USB-serial. The real
 > Foot read/write protocol (confirmed 2026-06-15) is the Router-family framed-serial one:
 > handshake `F0 00 00 7C 0F 0F C9 …` into Editor Mode, then get-commands `F0 00 00 7C 0F 0F <X> F7`
-> that stream **decoded** records back, and writes that replay a record's `.syx` frame (silent,
-> no ACK). The JAR frame is kept here only as historical context.
+> that stream **decoded** records back, and writes that replay a record's `.syx` frame and wait
+> for the device's `F0 09 F7` acknowledgement. See `LF_USB_DIRECT.md` for live-config exceptions.
+> The JAR frame is kept here only as historical context.
 
 The 2013 Java editor sent a short command frame (from `MidiFootController.SendMsg`):
 

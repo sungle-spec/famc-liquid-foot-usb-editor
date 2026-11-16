@@ -2,17 +2,22 @@
 Re-order records with reference auto-rewrite — the original editor's pick/sort "Save / Sync".
 
 Move the *content* of a record to a new position (shifting the records in between), then rewrite
-every reference so it still points to the same logical record. Confidently handled references:
+supported references so they still point to the same logical record. Linked label records move
+with their parent even when reference syncing is disabled. Confidently handled references:
   * moving a **Preset** updates the **Song** preset-slot references that point to it;
   * moving a **Song** updates the **Set-List** song-slot references.
 
-(The original also rewrites MOMENTARY/JUMP-TO-PRESET command references, but those command function
-codes aren't reverse-engineered in this build, so command-table references are left untouched.)
+(The original also rewrites MOMENTARY/JUMP-TO-PRESET command references, but the complete command-parameter encoding
+is not verified here, so command-table references are left untouched.)
 """
 from __future__ import annotations
 
 from .model.song import SLOT_OFF as SONG_PRESET_OFF, NUM_SLOTS as SONG_NUM_PRESETS, SLOT_UNUSED
 from .model.setlist import SONG_SLOT_OFF, NUM_SONG_SLOTS
+from .codec.frame import TYPE_LAYOUT
+
+# Labels belong to the content, not its old slot number.
+LINKED_EXTENSIONS = {1: (9, 10), 2: (11,)}
 
 # moved record type -> (referencing type, slot offset, slot count, byte width, unused-raw or None)
 REFERENCERS: dict[int, tuple[int, int, int, int, int | None]] = {
@@ -25,8 +30,10 @@ def move_record(dump, type_: int, src_num: int, dst_num: int, sync_refs: bool = 
     """Move record #src_num's content to position #dst_num (1-based), shifting the rest. If
     `sync_refs`, rewrite references so they follow the moved content. Returns the permutation
     {old_number: new_number}."""
-    recs = dump.records(type_)
+    recs = sorted(dump.records(type_), key=lambda rec: rec.number)
     n = len(recs)
+    if [rec.number for rec in recs] != list(range(1, n + 1)):
+        raise ValueError("re-order requires unique, consecutive record numbers starting at 1")
     if not (1 <= src_num <= n and 1 <= dst_num <= n):
         raise ValueError("position out of range")
     if src_num == dst_num:
@@ -39,6 +46,7 @@ def move_record(dump, type_: int, src_num: int, dst_num: int, sync_refs: bool = 
         recs[slot].values[:] = snap[content]
 
     perm = {content + 1: slot + 1 for slot, content in enumerate(order)}
+    _move_linked_extensions(dump, type_, perm)
     if sync_refs and type_ in REFERENCERS:
         rewrite_references(dump, type_, perm)
     return perm
@@ -65,3 +73,26 @@ def rewrite_references(dump, moved_type: int, perm: dict) -> int:
                     rec.values[o + 1] = (v >> 8) & 0xFF
                 changed += 1
     return changed
+
+
+def _move_linked_extensions(dump, type_: int, permutation: dict[int, int]) -> None:
+    """Move existing label records with their parent, including a sparse set of extensions.
+
+    Parent payloads are shifted between fixed slots. Extension identity lives in the frame
+    header; remapping that identity carries its label payload to the same new slot.
+    """
+    for ext_type in LINKED_EXTENSIONS.get(type_, ()):
+        _, _, wide_number = TYPE_LAYOUT[ext_type]
+        width = 4 if wide_number else 2
+        for frame in dump.frames:
+            if frame.type != ext_type:
+                continue
+            new_number = permutation.get(frame.rec_num + 1)
+            if new_number is None:
+                continue
+            frame.rec_num = new_number - 1
+            header = bytearray(frame.raw)
+            header[7:7 + width] = bytes(
+                (frame.rec_num >> shift) & 0xF for shift in range(4 * (width - 1), -1, -4)
+            )
+            frame.raw = bytes(header)

@@ -63,7 +63,8 @@ class SerialTransport:
         self.ser.flush()
 
     def _drain(self, idle_timeout: float, overall_timeout: float) -> bytes:
-        buf = bytearray()
+        buf = bytearray(getattr(self, "_frame_pending", b""))
+        self._frame_pending = b""
         t0 = last = time.time()
         while time.time() - t0 < overall_timeout:
             n = self.ser.in_waiting
@@ -107,20 +108,26 @@ class SerialTransport:
         which doesn't have this tax — found 2026-07-16 investigating a "hangs on reading
         device" report that turned out to be this, not an actual device stall. Any bytes after
         the frame are left for the next read (each request/reply pair is independent)."""
-        buf = bytearray()
-        t0 = time.time()
-        while time.time() - t0 < overall_timeout:
+        buf = bytearray(getattr(self, "_frame_pending", b""))
+        self._frame_pending = b""
+        deadline = time.monotonic() + overall_timeout
+        while True:
+            start = buf.find(SYSEX_START)
+            if start >= 0:
+                end = buf.find(SYSEX_END, start + 1)
+                if end >= 0:
+                    self._frame_pending = bytes(buf[end + 1:])
+                    return bytes(buf[start:end + 1])
+            if time.monotonic() >= deadline:
+                return bytes(buf)
             n = self.ser.in_waiting
             chunk = self.ser.read(n if n else 1)
             if chunk:
                 buf.extend(chunk)
-                frames = split_sysex(bytes(buf))
-                if frames:
-                    return frames[0]
-        return bytes(buf)
 
     def flush_input(self) -> None:
         """Discard any buffered incoming bytes (e.g. trailing live-view stream before a write)."""
+        self._frame_pending = b""
         try:
             self.ser.reset_input_buffer()
         except Exception:               # noqa: BLE001
@@ -141,7 +148,11 @@ class MidiTransport:
         import mido  # lazy
         self._mido = mido
         self.out = mido.open_output(out_name)
-        self.inp = mido.open_input(in_name)
+        try:
+            self.inp = mido.open_input(in_name)
+        except BaseException:
+            self.out.close()
+            raise
 
     def send(self, data: bytes) -> None:
         # data already includes F0..F7; mido wants the bytes between (exclusive).

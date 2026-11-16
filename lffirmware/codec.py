@@ -29,6 +29,10 @@ HEADER_LEN = 13
 TRAILER_LEN = 4
 BLOCK_BYTES = 128
 NIBBLE_XOR = 0x5
+# The v6.32 receiver refuses a block count of 0 or above this (its error 26): 1007 blocks =
+# 0x1F780 bytes, below the boot loader at 0x1F800. Older firmware evidently allowed more: one
+# genuine FAMC image (12+ v3.36) has 1008 blocks, so this is reported, not enforced, on the host.
+DEVICE_MAX_BLOCKS = 0x3EF
 
 MODEL_LETTERS = {"F": "Mini", "J": "12", "K": "12+", "L": "JR+", "H": "Pro+"}
 LETTER_FOR_MODEL = {v: k for k, v in MODEL_LETTERS.items()}
@@ -65,6 +69,11 @@ class FirmwareImage:
         return len(self.memory) == self.blocks * BLOCK_BYTES
 
     @property
+    def blocks_ok(self) -> bool:
+        """Block count a unit running v6.32 would accept (1..DEVICE_MAX_BLOCKS)."""
+        return 0 < self.blocks <= DEVICE_MAX_BLOCKS
+
+    @property
     def words_be(self) -> bytes:
         """The image as it travels on the wire: 16-bit words, high byte first."""
         return _swap_pairs(self.memory)
@@ -72,7 +81,8 @@ class FirmwareImage:
 
 def _swap_pairs(b: bytes) -> bytes:
     out = bytearray(len(b))
-    out[0::2], out[1::2] = b[1::2], b[0::2]
+    paired = len(b) - len(b) % 2
+    out[:paired:2], out[1:paired:2] = b[1:paired:2], b[:paired:2]
     if len(b) % 2:           # odd tail has no partner; keep it in place
         out[-1] = b[-1]
     return bytes(out)

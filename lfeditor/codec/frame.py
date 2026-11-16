@@ -88,6 +88,12 @@ class Frame:
         if t not in TYPE_LAYOUT:
             raise ValueError(f"unknown record type {t}")
         data_off, len_hi, recnum4 = TYPE_LAYOUT[t]
+        if frame[1:3] != b"\x00\x00" or frame[4] != 0 or frame[3] > 0x7F:
+            raise ValueError("not a FAMC record header")
+        if len(frame) < data_off + 1:
+            raise ValueError("truncated record header")
+        if any(n > 0xF for n in frame[7:-1]):
+            raise ValueError("record numbers, lengths and payload must be nibble encoded")
         nv = (frame[len_hi] << 4) + (frame[len_hi + 1] & 0xF)
         expected = data_off + 2 * nv + 1
         if expected != len(frame):

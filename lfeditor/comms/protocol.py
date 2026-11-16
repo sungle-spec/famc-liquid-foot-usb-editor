@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from .transport import Transport
 from ..codec import Dump
-from ..codec.frame import Frame, TYPE_LAYOUT
+from ..codec.frame import Frame, TYPE_LAYOUT, split_frames
 
 MODEL_FOOT = 0x7C    # Liquid Foot+ (also the device sysex ID in every frame header)
 MODEL_ROUTER = 0x7A  # Liquid Router (sibling device, same firmware family)
@@ -286,7 +286,9 @@ def connect(transport: Transport, model: int = DEFAULT_MODEL,
     for _ in range(retries):
         transport.send(handshake_frame(model))
         reply = b"".join(transport.read_raw(idle_timeout=0.4, overall_timeout=1.2))
-        if reply:
+        # Stale ACKs or unrelated MIDI bytes do not establish an editor session.
+        prefix = bytes([0xF0, 0x05, 0x00, model & 0x7F])
+        if any(frame.startswith(prefix) and len(frame) >= 7 for frame in split_frames(reply)):
             transport.send(session_frame(model))      # CA — editor-faithful, returns nothing
             transport.read_raw(idle_timeout=0.3, overall_timeout=0.6)
             return reply
@@ -313,6 +315,9 @@ def pull_records(transport: Transport, model: int = DEFAULT_MODEL,
             continue
         if len(data) % rlen == 1:        # drop the trailing status byte
             data = data[:-1]
+        if len(data) % rlen:
+            raise ValueError(f"Malformed bulk reply for type {rtype}: {len(data)} bytes "
+                             f"is not a multiple of record length {rlen}")
         n = len(data) // rlen
         out[rtype] = [list(data[i * rlen:(i + 1) * rlen]) for i in range(n)]
     return out
@@ -372,23 +377,21 @@ def pull_records_per_record(transport: Transport, model: int = DEFAULT_MODEL,
     for cmd in cmds:
         if cmd not in FOOT_PER_RECORD_CMDS:
             continue
-        _rtype, count = FOOT_PER_RECORD_CMDS[cmd]
+        rtype, count = FOOT_PER_RECORD_CMDS[cmd]
         misses = 0
         for rec_num in range(count):
             if on_progress:
                 on_progress(cmd, rec_num, count)
             transport.send(per_record_read_command(cmd, rec_num, model))
             data = _read_one_reply(transport)
-            if not data:
+            frame = _matching_record_reply(data, rtype, rec_num, model)
+            if frame is None:
                 misses += 1
                 if misses >= max_consecutive_misses:
                     break
                 continue
             misses = 0
-            try:
-                frames.append(Frame.parse(data))
-            except ValueError:
-                continue
+            frames.append(frame)
     return frames
 
 
@@ -404,12 +407,18 @@ def pull_one_record_per_record(transport: Transport, type_: int, rec_num: int,
         return None
     transport.send(per_record_read_command(cmd, rec_num, model))
     data = _read_one_reply(transport)
-    if not data:
-        return None
+    return _matching_record_reply(data, type_, rec_num, model)
+
+
+def _matching_record_reply(data: bytes, type_: int, rec_num: int, model: int) -> Frame | None:
+    """Only associate a reply with the request it actually answers."""
     try:
-        return Frame.parse(data)
+        frame = Frame.parse(data)
     except ValueError:
         return None
+    if (frame.type, frame.rec_num, frame.dev_id, frame.sub) != (type_, rec_num, model, 1):
+        return None
+    return frame
 
 
 def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
@@ -429,7 +438,8 @@ def pull_dump(transport: Transport, model: int = DEFAULT_MODEL, cmds=None,
     live progress during the per-record sweep, which is otherwise indistinguishable from a hang
     (see MAX_CONSECUTIVE_MISSES). The handshake is sent here; callers that already connected can
     pass an open, post-handshake transport — a second handshake is harmless."""
-    connect(transport, model)
+    if not connect(transport, model):
+        raise TimeoutError("LF+ did not acknowledge the editor-mode handshake")
     recs = pull_records(transport, model, cmds)
     dump = Dump()
     for rtype, value_lists in recs.items():

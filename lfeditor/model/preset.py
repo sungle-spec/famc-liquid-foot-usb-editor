@@ -43,6 +43,11 @@ FUNC_MIDI = 1
 # v6.31 by loading crafted presets (func bytes 0..67) and reading the names the editor displays —
 # see docs/LF_DATA_MODEL.md. NOTE: codes 13/14 were previously mis-mapped (IA Resend / IA Set Step);
 # the real IA Resend (map) is 21 and IA Set Step Number is 56.
+# Names are the original editor's full labels (its Func_Types string table). Several had been
+# recorded shortened from the narrow on-screen column ("Page Button Display" for "Page Button
+# Display Start", "Set Status#1 LED" for "... LED CLR", ...); restored 2026-11 after user feedback
+# that the short forms hide what the command does. 23/24 are the original's "System SnapShot
+# Store" / "... Restore", but which code is which is not yet verified, so they stay neutral.
 CMD_FUNCS = {
     0: "Empty",
     1: "MIDI Command",
@@ -59,8 +64,8 @@ CMD_FUNCS = {
     12: "IA Toggle (map)",
     13: "Set Color",
     14: "Preset Store",
-    15: "Preset Recall Store",
-    16: "Preset Trig 1st Button",
+    15: "Preset Recall Stored",
+    16: "Preset Trig 1st Bank Preset",
     17: "Go Global",
     18: "EXPR Mod CC#",
     19: "EXPR Send Value",
@@ -72,11 +77,11 @@ CMD_FUNCS = {
     25: "EXPR Change IA trigger",
     26: "IA Force Color Change",
     27: "Activate MTC",
-    28: "Set Status#1 LED",
+    28: "Set Status#1 LED CLR",
     29: "Auto-Tap-Tempo",
-    30: "Preset Resend IA",
+    30: "Preset Resend IA-Initial States",
     31: "Song # Store Current",
-    32: "Song # Recall Store",
+    32: "Song # Recall Stored",
     33: "Song Change",
     34: "Page Toggle Function #1/#2",
     35: "EXPR Slot 2 MIDI",
@@ -88,18 +93,18 @@ CMD_FUNCS = {
     41: "IF IA is ON, Stop",
     42: "IF IA is OFF, Skip",
     43: "IF IA is ON, Skip",
-    44: "IF Processing Trigger",
+    44: "IF Processing Trigger, Skip",
     45: "Stop",
     46: "EXPR Min Send Value",
     47: "EXPR Max Send Value",
-    48: "Page Button Display",
+    48: "Page Button Display Start",
     49: "Page LOCK to current",
     50: "Page UNLOCK current",
     51: "Looper Turn On",
     52: "Looper Turn Off",
     53: "EXPR Slot 2 CLEAR",
-    54: "Page Change to",
-    55: "Preset Momentary then Jump",
+    54: "Page Change to Preset Default",
+    55: "Preset Momentary, then Jump",
     56: "IA Set Step Number",
     57: "PC# +",
     58: "PC# -",
@@ -163,7 +168,7 @@ PRESET_FLAGS: list[tuple[int, int, str]] = [
     (41, 0x10, "Act as IA-Slot (vs Preset)"),
     (41, 0x20, "Allow multi-presses (process steps/reset)"),
     (41, 0x80, "Reset button: non-preset function"),
-    (42, 0x01, "IA effects"),
+    (42, 0x01, "Sync IA effects (IN)"),
     (42, 0x02, "Process preset commands after IAs"),
     (42, 0x04, "Sync preset name (IN)"),
     (42, 0x08, "Reset button: preset function"),

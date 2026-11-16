@@ -327,20 +327,20 @@ Step" was **wrong** — the real codes are below (`lfeditor/model/preset.py::CMD
 | 0 Empty | 17 Go Global | 34 Page Toggle Function #1/#2 | 51 Looper Turn On |
 | 1 MIDI Command | 18 EXPR Mod CC# | 35 EXPR Slot 2 MIDI | 52 Looper Turn Off |
 | 2 G-Tuner | 19 EXPR Send Value | 36 EXPR Slot 2 CC | 53 EXPR Slot 2 CLEAR |
-| 3 Step | 20 EXPR Resend Current | 37 EXPR Slot 2 Invert | 54 Page Change to |
-| 4 Sysex Send | 21 IA Resend (map) | 38 Device Sync | 55 Preset Momentary then Jump |
+| 3 Step | 20 EXPR Resend Current | 37 EXPR Slot 2 Invert | 54 Page Change to Preset Default |
+| 4 Sysex Send | 21 IA Resend (map) | 38 Device Sync | 55 Preset Momentary, then Jump |
 | 5 Delay ms | 22 EXPR Mod MIDI # | 39 IA-Map Change | 56 IA Set Step Number |
 | 6 Preset last used | 23 System SnapShot | 40 IF IA is OFF, Stop | 57 PC# + |
 | 7 Page last used | 24 System SnapShot 2 | 41 IF IA is ON, Stop | 58 PC# - |
 | 8 Page Change | 25 EXPR Change IA trigger | 42 IF IA is OFF, Skip | 59 PC# Save |
 | 9 Preset trigger | 26 IA Force Color Change | 43 IF IA is ON, Skip | 60 MIDI Clock (ms) |
-| 10 IA ON Trig (map) | 27 Activate MTC | 44 IF Processing Trigger | 61 MIDI Clock (BPM) |
-| 11 IA OFF Trig (map) | 28 Set Status#1 LED | 45 Stop | 62 IA Trigger |
+| 10 IA ON Trig (map) | 27 Activate MTC | 44 IF Processing Trigger, Skip | 61 MIDI Clock (BPM) |
+| 11 IA OFF Trig (map) | 28 Set Status#1 LED CLR | 45 Stop | 62 IA Trigger |
 | 12 IA Toggle (map) | 29 Auto-Tap-Tempo | 46 EXPR Min Send Value | 63 IA Resend |
-| 13 Set Color | 30 Preset Resend IA | 47 EXPR Max Send Value | 64 EXPR Block Xmit |
-| 14 Preset Store | 31 Song # Store Current | 48 Page Button Display | 65 EXPR unBlock Xmit |
-| 15 Preset Recall Store | 32 Song # Recall Store | 49 Page LOCK to current | 66 AXE3 Chan/State |
-| 16 Preset Trig 1st Button | 33 Song Change | 50 Page UNLOCK current | 67 AXE3 Chg SCENE# |
+| 13 Set Color | 30 Preset Resend IA-Initial States | 47 EXPR Max Send Value | 64 EXPR Block Xmit |
+| 14 Preset Store | 31 Song # Store Current | 48 Page Button Display Start | 65 EXPR unBlock Xmit |
+| 15 Preset Recall Stored | 32 Song # Recall Stored | 49 Page LOCK to current | 66 AXE3 Chan/State |
+| 16 Preset Trig 1st Bank Preset | 33 Song Change | 50 Page UNLOCK current | 67 AXE3 Chg SCENE# |
 
 For the slot/map functions (10, 11, 12, 21, 39, 56, 62, 63) `b1` is the IA-slot / map number. Other
 functions carry function-specific parameters in b1–b3; the editor surfaces them as raw Data fields

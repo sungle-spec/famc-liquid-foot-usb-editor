@@ -219,13 +219,13 @@ table.iatable td.num { width:26px; color:var(--text-dim); text-align:right; }
   border-radius:5px; padding:5px 10px; cursor:pointer; }
 .mmc button:hover { background:var(--accent-dim); }
 
-/* ---- command table (fields.py CommandTableField: Function 120 / MIDI 78 / Cmd stretch, 24px rows) ---- */
+/* ---- command table (fields.py CommandTableField: Function 176 / MIDI 78 / Cmd stretch, 24px rows) ---- */
 table.cmd { border-collapse:collapse; width:100%; background:var(--panel-dk); }
 table.cmd th, table.cmd td { border:1px solid var(--border); padding:1px 3px; text-align:left; }
 table.cmd th { background:var(--panel-light); color:var(--text-dim); font-weight:600; padding:4px 6px; }
 table.cmd td { height:24px; }
 table.cmd td select, table.cmd td input { width:100%; }
-table.cmd col.c-fn { width:120px; } table.cmd col.c-midi { width:78px; }
+table.cmd col.c-fn { width:176px; } table.cmd col.c-midi { width:78px; }
 table.cmd col.c-d1, table.cmd col.c-d2 { width:64px; }
 table.cmd td .decoded { color:var(--accent); }
 

@@ -42,7 +42,9 @@ WebSerial — the **Connect** button is disabled there.
 - **Pages/Songs/Setlists/IA-Switches all transfer over USB now**, all via bulk commands
   (0x06/0x07/0x08/0x09, hardware-confirmed 2026-07-16 — see
   [LF_USB_DIRECT.md](LF_USB_DIRECT.md)), and every type is writable.
-- No live expression-pedal calibration view yet (the desktop has it; it's a streaming `D2` mode).
+- Live expression-pedal calibration is implemented in `web/livecal.js` using the streaming `D2`
+  mode and the Python `dev_*` helpers. The historical smoke test below does not validate this
+  later feature.
 - **Always keep a `.syx` backup before writing** — writes have no undo.
 - The **Connect** click must be a real user click: Chrome only shows the serial-port picker for a
   genuine user gesture (synthesized/automated clicks are rejected with "No port selected").

@@ -144,6 +144,10 @@ The **Command Programming** table sends up to 16 commands when the preset fires:
 2. For IA-work, pick an IA function (e.g. `IA ON Trig`) — the number column then holds the
    IA-slot number. Or skip the typing: **drag an IA-Slot from the Q-LIST onto the row**.
 3. The read-out at the row's end decodes what will actually be sent — a quick sanity check.
+4. **Not sure what a function does? Hover it.** Every entry in the Function list, and the function
+   selected on each row, has pop-up help. The names are the original editor's full labels — e.g.
+   `Page Button Display Start` is a start *index* into the Page's buttons (which button lands on
+   physical button #1), not an on/off switch.
 
 ### Set the preset's initial IA states
 
@@ -217,7 +221,7 @@ The **IA-Slot report** has one row per slot — enabled, switch type, group, syn
 colours, step names, and every ON and BYPASS command decoded (`1. CC ch1 #7 = 100 | 2. PC ch2 → prog 5`,
 numbered by table row) — handy for documenting a rig or studio's commands in a spreadsheet. The
 **IA-Map report** has one row per map, with the IA-Slot (`number: name`) each of the 60 buttons
-triggers, plus a count of buttons that differ from the default map.
+triggers, plus a count of buttons that differ from the identity mapping (button N → IA-Slot N).
 
 ---
 

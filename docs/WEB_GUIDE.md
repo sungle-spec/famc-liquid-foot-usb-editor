@@ -295,13 +295,17 @@ in [WEBSERIAL.md](WEBSERIAL.md).
   files; the amber **● unsaved** badge tells you when there are changes you haven't downloaded.
 - **Losslessness.** Only the bytes you change are rewritten; a load→save with no edits reproduces
   your file byte-for-byte (this is covered by automated tests on every change).
-- **First load is slow, later loads aren't.** The Python runtime (~a few MB) is fetched once and
-  cached.
+- **Startup needs runtime assets.** Pyodide is fetched from a CDN and the Python bundle from the
+  server. Browser caching can speed up later loads, but offline reloads are not guaranteed.
 - **The Connect button is greyed out** → you're in Firefox/Safari (no WebSerial), or the page
   isn't on `https`/`localhost`.
-- **Not in the web build (yet):** MIDI Monitor / Pass-Thru, the EEPROM connection wizard, live
-  expression-pedal calibration, and device resets / firmware loading — use the
-  [desktop app](../USER_GUIDE.md) for those.
+- **MIDI Monitor / Pass-Thru** uses Web MIDI independently of the LF+ WebSerial connection; it
+  requires browser MIDI permission. **Live Calibrate** on Exp Pedals uses the connected LF+
+  through WebSerial and requires an open `.syx`. These features are implemented; this is not a
+  claim of hardware validation across all browsers and models.
+- **Desktop-only:** the EEPROM connection wizard and USB MIDI Bridge. Device resets and firmware
+  loading remain disabled in both editors; firmware recovery uses the separate
+  [beta firmware loader](FIRMWARE_LOADER.md).
 - **Tab-by-tab reference shots:** every tab is pictured in [`docs/img/web/`](img/web/) —
   [Presets](img/web/tab-presets.png) · [Set-List](img/web/tab-setlist.png) ·
   [IA-Slot](img/web/tab-iaslot.png) · [IA-Maps](img/web/tab-iamaps.png) ·

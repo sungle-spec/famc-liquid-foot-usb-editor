@@ -672,6 +672,9 @@ class SlotPickerField(Field):
             cb.clear()
             cb.addItems(texts)   # one batched call — per-item addItem is pathologically slow on Win
             cb.blockSignals(False)
+        # Channel-name refresh rebuilds these too; restore the bound selection.
+        if hasattr(self, "_values"):
+            self.load(self._values)
 
     def _stored(self, values, off):
         if self.width == 2:
@@ -961,6 +964,7 @@ class CommandTableField(Field):
     def build(self):
         from PySide6.QtWidgets import QTableWidget, QComboBox, QSpinBox, QHeaderView
         from ..model.preset import FUNC_MIDI, MIDI_MSG_TYPES
+        from ..model.cmd_help import func_help
         self._FUNC_MIDI = FUNC_MIDI
         DropTable = type("_CmdTableW", (_CmdDropTable, QTableWidget), {})
         self.w = DropTable(self.count, 5)
@@ -976,7 +980,7 @@ class CommandTableField(Field):
         hh.setSectionResizeMode(2, QHeaderView.Stretch)       # Cmd (fills wide tables)
         hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.w.setColumnWidth(0, 120)
+        self.w.setColumnWidth(0, 176)   # fits "Page Button Display Start" / "Set Status#1 LED CLR"
         self.w.setColumnWidth(1, 78)
         self.w.setMinimumHeight(min(self.count, 12) * 24 + 28)
         self.funcs_c, self.midis, self.cmds, self.d1s, self.d2s = [], [], [], [], []
@@ -984,7 +988,11 @@ class CommandTableField(Field):
             fc = QComboBox()
             for code, name in self.funcs.items():
                 fc.addItem(name, code)
+                tip = func_help(code)
+                if tip:   # hover help on each entry of the open list
+                    fc.setItemData(fc.count() - 1, f"{name} — {tip}", Qt.ToolTipRole)
             fc.currentIndexChanged.connect(lambda _i, row=r: self._write_func(row))
+            fc.currentIndexChanged.connect(lambda _i, row=r: self._update_func_tip(row))
             mc = QComboBox()
             for i, nm in enumerate(self._chan_names):
                 mc.addItem(nm, i)
@@ -1018,6 +1026,14 @@ class CommandTableField(Field):
         if combo.findData(code) < 0:
             combo.addItem(f"Fn {code}", code)
 
+    def _update_func_tip(self, row) -> None:
+        """Hover help for the row's *selected* function (the closed combo)."""
+        from ..model.cmd_help import func_help
+        fc = self.funcs_c[row]
+        code = fc.currentData()
+        tip = func_help(code) if code is not None else ""
+        fc.setToolTip(f"{fc.currentText()} — {tip}" if tip else "")
+
     def load(self, values):
         self._values = values
         self._loading = True
@@ -1026,6 +1042,7 @@ class CommandTableField(Field):
             func, b1, b2, b3 = values[off], values[off + 1], values[off + 2], values[off + 3]
             self._ensure_code(self.funcs_c[r], func)
             self.funcs_c[r].setCurrentIndex(self.funcs_c[r].findData(func))
+            self._update_func_tip(r)
             is_midi = func == self._FUNC_MIDI
             self.midis[r].setEnabled(is_midi)
             self.cmds[r].setEnabled(is_midi)
