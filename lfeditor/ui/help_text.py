@@ -19,6 +19,7 @@ FIELD_HELP: dict[str, dict[str, str]] = {
         'Reset button: preset function': 'when this preset loads, should we reset all Page button functions that currently set for Function #2 active back to Function #1 active. This will ONLY effect buttons that have at least one Preset Holder within the button.',
         'Process preset commands after IAs': 'By default presets send pending SONG commands, then their programming commands, and then IA-Slots. Turn this parameter ON to allow IA-Slots to process first, and then preset commands.',
         'Sync preset name (IN)': 'if properly set to sync with an external device- the Preset name will override and use the external devices current preset name',
+        'Sync IA effects (IN)': "if external device sync parameters are set, this preset will try to re-sync with an external device to get current Sync'd IA-Slot States. All IA's that are properly sync'd will update their states and status to match the external device.",
         'Send as [bypass] for initial BLOCKED': "OFF: Blocked IA-Slots are ignored and will NOT process any commands. When ON, Blocked IA's will initially trigger BYPASSED commands and then block the LF+ and the user from triggering the IA-Slot.",
         'Block exp pedal #1 until assigned': 'OFF: Expression Pedals will remain in current state of programming ON: When this preset is triggered, it will temporarily BLOCK the Expression pedal from transmitting until an unblock command is executed, or any of the EXP... programming commands are processed.',
         'Block exp pedal #2 until assigned': 'OFF: Expression Pedals will remain in current state of programming ON: When this preset is triggered, it will temporarily BLOCK the Expression pedal from transmitting until an unblock command is executed, or any of the EXP... programming commands are processed.',
@@ -34,6 +35,10 @@ FIELD_HELP: dict[str, dict[str, str]] = {
         'End of List Cycle Type': 'Defines Type of Cycle when Song UP is pressed at the end of the set-list: (1) Stop- stop scrolling, (2) Start Of List - After last song in set, cycle to first song.',
     },
     'IA-Slot': {
+        'Step 1': 'Nick Name for Step #1',
+        'Step 2': 'Nick Name for Step #2',
+        'Step 3': 'Nick Name for Step #3',
+        'Step 4': 'Nick Name for Step #4',
         'Switch type': 'Defines the behavior of the IA-Slot',
         'Enabled': 'Set to ON if this IA-Slot will be a global IA. Global IA\'s normally keep their "state" while switching between presets. Global IA\'s have a power-on state defined as their initial state.',
         'On colour': 'Color to use when the IA-Slot is active on a button and in the ON state',
@@ -48,6 +53,7 @@ FIELD_HELP: dict[str, dict[str, str]] = {
         'Force step #1 on preset change': 'Turn ON to force the LF+ to process STEP #1 as soon as a preset is triggered. Turn OFF if you do not want a preset change to automatically trigger STEP #1. The preset must have RESEND INTIAL IA-Slots turned ON for this parameter to take effect.',
     },
     'Song': {
+        'Trigger type': 'IMMEDIATELY will trigger the song as soon as its selected. ARM ONLY will set the song and prepare it to trigger as soon as an ENTER/SELECT button is pressed, a preset is triggered, or any Scroll Event is processed by a button.',
         'Enable MTC Mode': 'Enable MTC control as dedicated mode when using this SONG',
     },
     'Sysex Msg': {
@@ -116,6 +122,7 @@ FIELD_HELP: dict[str, dict[str, str]] = {
         'PRESET': 'Block the B1 + B5 Preset change button combo sequence',
         'SAVE / COPY': 'When set, the LF+ will not enter Save/Copy mode when a preset is held for 3+ seconds',
         'Line 2 state (UPPER/lower)': 'When turned ON (and show 2nd Function name is ON) -- 2nd line will show the IA-Slot nick name as all LOWERCASE when the status is OFF/BYPASS, and all UPPERCASE when the status is ON. When turned OFF (and show 2nd Function name is ON) -- 2nd line will show default function NickName as programmed.',
+        'Line 1 state (UPPER/lower)': 'When turned ON (and show 1st Function name is ON) -- 1st line will show the IA-Slot nick name as all LOWERCASE when the status is OFF/BYPASS, and all UPPERCASE when the status is ON. When turned OFF -- 1st line will show default function NickName as programmed.',
         'IA Display on Main LCD': "OFF: IA-Slot names will follow label definitions or actual IA-Slot Nick Name for Button LCD label display ON: first 20 IA-Slots of current IA-Map will utilize the label name defined in the preset if it is set. An Empty Label will display the IA-Slot's nickname as normal.",
     },
     'Colours': {

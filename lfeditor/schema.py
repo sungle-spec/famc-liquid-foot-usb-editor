@@ -61,6 +61,9 @@ def _field_dict(f, tab_title: str = "") -> dict:
         val = getattr(f, name, None)
         if isinstance(val, dict):
             d[name] = {str(k): v for k, v in val.items()}
+    if "funcs" in d:   # per-function hover help for the command table (same text as the desktop)
+        from .model.cmd_help import CMD_FUNC_HELP
+        d["func_help"] = {str(k): v for k, v in CMD_FUNC_HELP.items() if str(k) in d["funcs"]}
     # a DependentEnumField's options vary with another byte: {controller value: {value: label}}
     ob = getattr(f, "options_by", None)
     if isinstance(ob, dict):

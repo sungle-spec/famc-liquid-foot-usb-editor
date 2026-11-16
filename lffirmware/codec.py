@@ -29,6 +29,10 @@ HEADER_LEN = 13
 TRAILER_LEN = 4
 BLOCK_BYTES = 128
 NIBBLE_XOR = 0x5
+# The v6.32 receiver refuses a block count of 0 or above this (its error 26): 1007 blocks =
+# 0x1F780 bytes, below the boot loader at 0x1F800. Older firmware evidently allowed more: one
+# genuine FAMC image (12+ v3.36) has 1008 blocks, so this is reported, not enforced, on the host.
+DEVICE_MAX_BLOCKS = 0x3EF
 
 MODEL_LETTERS = {"F": "Mini", "J": "12", "K": "12+", "L": "JR+", "H": "Pro+"}
 LETTER_FOR_MODEL = {v: k for k, v in MODEL_LETTERS.items()}
@@ -63,6 +67,11 @@ class FirmwareImage:
     @property
     def length_ok(self) -> bool:
         return len(self.memory) == self.blocks * BLOCK_BYTES
+
+    @property
+    def blocks_ok(self) -> bool:
+        """Block count a unit running v6.32 would accept (1..DEVICE_MAX_BLOCKS)."""
+        return 0 < self.blocks <= DEVICE_MAX_BLOCKS
 
     @property
     def words_be(self) -> bytes:

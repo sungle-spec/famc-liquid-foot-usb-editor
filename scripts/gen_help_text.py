@@ -36,6 +36,7 @@ FIELD_MAP: dict[str, dict[str, str]] = {
         "Reset button: preset function": "currently set for Function #2 active back to Function #1",
         "Process preset commands after IAs": "allow IA-Slots to process first, and then preset commands",
         "Sync preset name (IN)": "the Preset name will override and use the external devices current preset name",
+        "Sync IA effects (IN)": "this preset will try to re-sync with an external device to get current Sync'd IA-Slot States",
         "Send as [bypass] for initial BLOCKED": "Blocked IA's will initially trigger BYPASSED commands",
         "Block exp pedal #1 until assigned": "Expression Pedals will remain in current state of programming",
         "Block exp pedal #2 until assigned": "Expression Pedals will remain in current state of programming",
@@ -51,6 +52,10 @@ FIELD_MAP: dict[str, dict[str, str]] = {
         "End of List Cycle Type": "Defines Type of Cycle when Song UP is pressed at the end of the set-list",
     },
     "IA-Slot": {
+        "Step 1": "Nick Name for Step #1",
+        "Step 2": "Nick Name for Step #2",
+        "Step 3": "Nick Name for Step #3",
+        "Step 4": "Nick Name for Step #4",
         "Switch type": "Defines the behavior of the IA-Slot",
         "Enabled": "Set to ON if this IA-Slot will be a global IA",
         "On colour": "active on a button and in the ON state",
@@ -65,6 +70,7 @@ FIELD_MAP: dict[str, dict[str, str]] = {
         "Force step #1 on preset change": "force the LF+ to process STEP #1 as soon as a preset is triggered",
     },
     "Song": {
+        "Trigger type": "IMMEDIATELY will trigger the song as soon as its selected",
         "Enable MTC Mode": "Enable MTC control as dedicated mode when using this SONG",
     },
     "Sysex Msg": {
@@ -134,6 +140,7 @@ FIELD_MAP: dict[str, dict[str, str]] = {
         "PRESET": "Block the B1 + B5 Preset change button combo sequence",
         "SAVE / COPY": "will not enter Save/Copy mode when a preset is held for 3+ seconds",
         "Line 2 state (UPPER/lower)": "2nd line will show the IA-Slot nick name as all LOWERCASE",
+        "Line 1 state (UPPER/lower)": "1st line will show the IA-Slot nick name as all LOWERCASE",
         "IA Display on Main LCD": "IA-Slot names will follow label definitions",
     },
     "Colours": {

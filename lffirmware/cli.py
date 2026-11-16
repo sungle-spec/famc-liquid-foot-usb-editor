@@ -40,6 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--inspect", action="store_true",
                     help="read-only: show what's inside --image (version, entry vectors, code/data "
                          "split, LCD strings) and the exact acceptance checks the device runs, then exit")
+    ap.add_argument("--explain-error", metavar="N", nargs="?", const="all",
+                    help="what \"Firmware Failed / Error N\" on the unit's display means "
+                         "(omit N to list every code) and exit")
     ap.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
@@ -50,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
         ports = list_ports()
         print("\n".join(ports) if ports else "no MIDI output ports found")
         return 0
+
+    if args.explain_error:
+        return _explain_error(args.explain_error)
 
     if args.decode:
         if not args.image:
@@ -146,11 +152,25 @@ def _inspect(image: str, model: str | None) -> int:
     except (OSError, codec.FirmwareFormatError) as exc:
         print(f"cannot inspect: {exc}")
         return 2
+    checks = device_preflight(data, model)
     print(describe_inspection(insp))
     print()
-    print(describe_preflight(device_preflight(data, model)))
-    failed = [c for c in device_preflight(data, model) if c.ok is False]
-    return 0 if not failed else 2
+    print(describe_preflight(checks))
+    return 2 if any(c.ok is False for c in checks) else 0
+
+
+def _explain_error(which: str) -> int:
+    from .inspect import DEVICE_ERRORS, describe_device_errors, explain_device_error
+    if which == "all":
+        print(describe_device_errors())
+        return 0
+    try:
+        code = int(which, 0)
+    except ValueError:
+        print(f"not a number: {which!r}")
+        return 2
+    print(f"Error {code}: {explain_device_error(code)}")
+    return 0 if code in DEVICE_ERRORS else 2
 
 
 def _selftest() -> int:
@@ -174,6 +194,7 @@ def _selftest() -> int:
                      "--allow-unverified"]) == 2                                     # wrong model
         assert main(["--image", fake, "--inspect", "--model", "12+"]) == 0          # read-only inspect
         assert main(["--image", fake, "--inspect", "--model", "Pro+"]) == 2         # wrong-model check fails
+        assert main(["--explain-error", "34"]) == 0 and main(["--explain-error", "99"]) == 2
     print(f"selftest OK — LF+ Firmware Loader {__version__}, "
           f"{len(KNOWN_IMAGES)} known images")
     return 0

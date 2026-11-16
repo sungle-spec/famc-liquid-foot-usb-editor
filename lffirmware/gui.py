@@ -159,8 +159,9 @@ class LoaderWindow(QWidget):
             checks = device_preflight(open(path, "rb").read(),
                                       self.model.currentText() or None)
             failed = [c for c in checks if c.ok is False]
-            text += ("\ndevice checks: all host-checkable fields pass"
-                     if not failed else f"\ndevice checks: {len(failed)} FAILED — see Inspect…")
+            text += ("\nunit checks: every check this computer can make passes"
+                     if not failed else
+                     f"\nunit checks: {len(failed)} FAILED — the unit would refuse it; see Inspect…")
         except Exception:  # noqa: BLE001 — inspection is advisory; validation already gates the flash
             pass
         self.report.setPlainText(text)
@@ -173,12 +174,14 @@ class LoaderWindow(QWidget):
         if self.rep is None:
             return
         from .inspect import (
-            describe_inspection, describe_preflight, device_preflight, inspect_firmware)
+            describe_device_errors, describe_inspection, describe_preflight, device_preflight,
+            inspect_firmware)
         from . import codec
         try:
             data = open(self.rep.path, "rb").read()
             body = (describe_inspection(inspect_firmware(data)) + "\n\n"
-                    + describe_preflight(device_preflight(data, self.model.currentText() or None)))
+                    + describe_preflight(device_preflight(data, self.model.currentText() or None))
+                    + "\n\n" + describe_device_errors())
         except (OSError, codec.FirmwareFormatError) as exc:
             body = f"Cannot inspect this file: {exc}"
         dlg = QMessageBox(self)
