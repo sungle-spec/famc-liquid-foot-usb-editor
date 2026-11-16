@@ -37,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--decode", metavar="OUT.bin",
                     help="read-only: decode --image to a raw PIC18 program-memory image (little-"
                          "endian, for a disassembler such as Ghidra's PIC-18 module) and exit")
+    ap.add_argument("--inspect", action="store_true",
+                    help="read-only: show what's inside --image (version, entry vectors, code/data "
+                         "split, LCD strings) and the exact acceptance checks the device runs, then exit")
     ap.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
@@ -52,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
         if not args.image:
             ap.error("--decode needs --image")
         return _decode(args.image, args.decode)
+
+    if args.inspect:
+        if not args.image:
+            ap.error("--inspect needs --image")
+        return _inspect(args.image, args.model)
 
     if not args.image or not args.model:
         ap.error("--image and --model are required (or use --list-ports)")
@@ -127,6 +135,24 @@ def _decode(image: str, out: str) -> int:
     return 0 if img.checksum_ok and img.length_ok else 2
 
 
+def _inspect(image: str, model: str | None) -> int:
+    from . import codec
+    from .inspect import (
+        describe_inspection, describe_preflight, device_preflight, inspect_firmware)
+    try:
+        with open(image, "rb") as fh:
+            data = fh.read()
+        insp = inspect_firmware(data)
+    except (OSError, codec.FirmwareFormatError) as exc:
+        print(f"cannot inspect: {exc}")
+        return 2
+    print(describe_inspection(insp))
+    print()
+    print(describe_preflight(device_preflight(data, model)))
+    failed = [c for c in device_preflight(data, model) if c.ok is False]
+    return 0 if not failed else 2
+
+
 def _selftest() -> int:
     """Frozen-bundle gate for CI: exercise validation + the refusal logic, no MIDI I/O."""
     import tempfile
@@ -146,6 +172,8 @@ def _selftest() -> int:
                      "--allow-unverified"]) == 0
         assert main(["--image", fake, "--model", "Pro+", "--dry-run",
                      "--allow-unverified"]) == 2                                     # wrong model
+        assert main(["--image", fake, "--inspect", "--model", "12+"]) == 0          # read-only inspect
+        assert main(["--image", fake, "--inspect", "--model", "Pro+"]) == 2         # wrong-model check fails
     print(f"selftest OK — LF+ Firmware Loader {__version__}, "
           f"{len(KNOWN_IMAGES)} known images")
     return 0

@@ -55,7 +55,14 @@ class LoaderWindow(QWidget):
         row = QHBoxLayout()
         self.pick = QPushButton("Choose firmware file…")
         self.pick.clicked.connect(self.choose_file)
-        row.addWidget(self.pick); row.addStretch(1)
+        row.addWidget(self.pick)
+        self.inspect_btn = QPushButton("Inspect…")
+        self.inspect_btn.setEnabled(False)
+        self.inspect_btn.setToolTip("Read-only: show what's inside this image and the exact "
+                                    "acceptance checks the device runs before it flashes.")
+        self.inspect_btn.clicked.connect(self.show_inspection)
+        row.addWidget(self.inspect_btn)
+        row.addStretch(1)
         v1.addLayout(row)
         self.report = QTextEdit(); self.report.setReadOnly(True)
         self.report.setFixedHeight(110)
@@ -146,10 +153,39 @@ class LoaderWindow(QWidget):
         if not path:
             return
         self.rep = validate_image(path)
-        self.report.setPlainText(describe(self.rep))
+        text = describe(self.rep)
+        try:
+            from .inspect import device_preflight
+            checks = device_preflight(open(path, "rb").read(),
+                                      self.model.currentText() or None)
+            failed = [c for c in checks if c.ok is False]
+            text += ("\ndevice checks: all host-checkable fields pass"
+                     if not failed else f"\ndevice checks: {len(failed)} FAILED — see Inspect…")
+        except Exception:  # noqa: BLE001 — inspection is advisory; validation already gates the flash
+            pass
+        self.report.setPlainText(text)
+        self.inspect_btn.setEnabled(True)
         self.override.setVisible(self.rep.is_plausible and not self.rep.is_known_good)
         self.override.setChecked(False)
         self.rearm()
+
+    def show_inspection(self):
+        if self.rep is None:
+            return
+        from .inspect import (
+            describe_inspection, describe_preflight, device_preflight, inspect_firmware)
+        from . import codec
+        try:
+            data = open(self.rep.path, "rb").read()
+            body = (describe_inspection(inspect_firmware(data)) + "\n\n"
+                    + describe_preflight(device_preflight(data, self.model.currentText() or None)))
+        except (OSError, codec.FirmwareFormatError) as exc:
+            body = f"Cannot inspect this file: {exc}"
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Firmware inspection (read-only)")
+        dlg.setText(body)
+        dlg.setStyleSheet("QLabel{font-family: Menlo, 'Courier New', monospace; font-size: 11px;}")
+        dlg.exec()
 
     def rearm(self, *_):
         r = self.rep

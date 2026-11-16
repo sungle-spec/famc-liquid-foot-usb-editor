@@ -29,6 +29,14 @@ itself has always kept *Load Firmware* disabled. This standalone tool exists for
   and the header wins. See [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#decoded-format-lffirmwarecodecpy).
 - Refuses model mismatches: the image's verified identity must match the model **you** select.
   Wrong-model firmware can permanently damage a unit.
+- **Mirrors the device's own acceptance checks** (2026-11-16). The firmware receiver was
+  disassembled (`lffirmware/pic18.py`); it validates a precise set of fields before it commits —
+  the command bytes, the header marker, the block count, the 16-bit checksum (which it verifies
+  *twice*, re-reading flash the second time), and the **model letter against the connected unit** —
+  and refuses a wrong-model or corrupt image with a distinct error code. The loader runs those same
+  checks on the host (**Inspect…** in the GUI, `--inspect` on the CLI) and shows each one against
+  the device's own error code, so a bad image is caught before any byte is sent rather than by the
+  unit mid-flash. See [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#inside-the-image-lffirmwarepic18py-2026-11-16).
 - Sends the image the way the original editor did: **one sysex message over MIDI** (the device's
   MIDI DIN input — *not* the LF+ USB socket), ~82–86 s at DIN speed.
 - Keeps your computer awake during the send, records everything (including any device replies)
@@ -82,10 +90,15 @@ something.
 
 ```bash
 python -m lffirmware --list-ports
+python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --inspect     # read-only: what's inside + device checks
 python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --dry-run     # verify only, sends nothing
 python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --port "USB MIDI Interface"
 ```
 
+`--inspect` (read-only) prints the firmware version/model, the PIC18 entry vectors (and confirms
+the boot loader sits above the image, so a failed flash keeps the hold-button rescue), the
+code/data split, the recovered LCD string table, and the **device acceptance checks** mapped to
+the unit's own error codes — it exits non-zero if any host-checkable field would be rejected.
 `--decode OUT.bin` (read-only) writes the image as raw little-endian PIC18 program memory for a
 disassembler. `--dry-run` performs every check and shows exactly what a real run would send — safe anywhere,
 no MIDI I/O. `--allow-unverified` is required for images not in the known-hash list.
