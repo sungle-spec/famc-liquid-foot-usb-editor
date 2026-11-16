@@ -57,9 +57,10 @@ forum — the loader will verify whatever you feed it against the known-good has
 
 - A **USB-MIDI interface** (any class-compliant one) cabled: computer MIDI OUT → LF+ **MIDI IN**.
 - The firmware `.syx` **for your exact model** (`LF+12+_FIRM.syx`, `LF+MINI_FIRM.syx`, …).
-- The loader: download it from the
-  [firmware-loader-v0.1.0b1 pre-release](https://github.com/sungle-spec/famc-liquid-foot-editor-builds/releases/tag/firmware-loader-v0.1.0b1)
-  (macOS / Windows / Linux, checksums included), or run from source: `python -m lffirmware`.
+- The loader: it ships with every editor release — take `LFFirmwareLoader-…` for your OS from the
+  [latest release](https://github.com/sungle-spec/famc-liquid-foot-editor-builds/releases/latest)
+  (checksums included). **0.1.0b2** (editor release v0.0.19) adds **Inspect…**, `--inspect` and
+  `--explain-error`. Or run from source: `python -m lffirmware`.
 
 ## Route A — recover a bricked unit
 

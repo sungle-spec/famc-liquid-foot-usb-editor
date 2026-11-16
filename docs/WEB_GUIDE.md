@@ -102,6 +102,8 @@ The same header works on Songs, Set-Lists, IA-Slots, Pages, Sysex Msgs and IA-Ma
 
 The **Command Programming** table is the heart of a preset — up to 16 commands sent when the
 preset is triggered. Columns mirror the original: `Function | MIDI | Cmd | CC#/PC# | Data`.
+Function names are the original editor's full labels (e.g. `Page Button Display Start`), and
+hovering a row's Function shows what that function does.
 
 To send **Program Change 5 on your amp's channel** from row 1:
 

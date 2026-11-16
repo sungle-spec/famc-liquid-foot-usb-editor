@@ -3,4 +3,4 @@ controllers, built for recovering bricked units via the device's documented MIDI
 mode. Separate from the editor on purpose: flashing stays out of the main app until this tool
 has enough field validation. See docs/FIRMWARE_LOADER.md."""
 
-__version__ = "0.1.0b1"
+__version__ = "0.1.0b2"

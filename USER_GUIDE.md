@@ -145,6 +145,9 @@ The toolbar carries the same icon buttons as the original LF+ Editor:
 
 ### What each tab edits
 
+Command tables (Presets, Songs, IA-Slot) use the original editor's full function names, and every
+function has hover help — in the open Function list and on each row's selected function.
+
 | Tab | Edits |
 |---|---|
 | **Presets** | full/nick name, default page, IA-slot map, behavioural flags, step names, **IA-Slot Defined Labels**, **Preset MAP Labels** (1–20), initial IA-slot ON-states, and the **Command-Programming table** (`Function · MIDI device · Cmd · CC#/PC# · Data` — the MIDI column resolves the channel to its device name) |

@@ -142,6 +142,14 @@ macOS). Likely cause: Qt >= 6.7's default "windows11" style draws translucent la
 force Fusion on `win32` only (`lfeditor/ui/theme.py: apply_style`). **Unverified on Windows** — the
 tester's build also predates the Send Edits restore, so confirm on a fresh build from `main`.
 
+**Command-function names and help (tester report, 2026-11-16).** Nine function names had been
+recorded shortened from the original's narrow table column — most visibly "Page Button Display"
+for **Page Button Display Start**, which reads like an on/off switch but is a start index into the
+Page's buttons. All nine now use the original's own `Func_Types` strings, and every function has
+hover help (`lfeditor/model/cmd_help.py`, desktop + web). Still unverified: which of codes 23/24
+is "System SnapShot Store" and which is "Restore". The original also shows a colour swatch, step
+name or page name beside these commands where we show the number — not built.
+
 ## 5. REA/disassembly findings (2026-11-09)
 
 ### 5a. Every sysex frame the original builds (`scripts/extract_original_frames.py`)
