@@ -60,6 +60,36 @@ trailer = 16-bit sum of the payload nibbles (raw), hi nibble first
   and ~335 LCD strings (the unit's whole menu text table at `0x1E083…`, plus `Waiting`, `KEMPER`,
   `AXE-FX III`, `Reset Pre Pg Functions`, …).
 
+### Inside the image (`lffirmware/pic18.py`, 2026-11-16)
+
+A small, read-only PIC18 disassembler now lets us *read* the decoded image (never run or patch it).
+A recursive trace from the reset + interrupt vectors (bytes 0/4/8) decodes **>95 %** of every
+v6.32 image as reachable code with **zero decode failures** across all five models, and recovers
+~320 functions. What it shows:
+
+- **Entry vectors.** `Reset` (byte 0) `GOTO 0x1F800` — the boot-loader region, which sits *above*
+  the application image and is **not** part of the `.syx`. This is why the hold-button rescue
+  always works: a bad application flash cannot touch the loader. High/low interrupt vectors
+  (4/8) `GOTO` into the image proper.
+- **The on-device command dispatcher** (one `XORLW` ladder on the received control byte) handles,
+  beyond the `C9/CA/CB/CC/CF` we already knew: **`C8` = enter firmware-receive from the running
+  app** (calls the same receiver the hold-button route reaches), `CD`/`CE` = diagnostic LCD modes,
+  **`D0` = reset config, `D1` = factory reset, `D2` = a data read-back/echo** loop. So there are
+  *two* ways into the flasher — the hardware rescue and sysex `C8` — the loader tool deliberately
+  documents but does not auto-trigger `C8`.
+- **The receiver validates before it commits**, with a distinct LCD/return error code per check:
+  model/version header byte vs the device's own identity (err `16`), command byte `08` (`17`),
+  sub-command `06` (`18`), header `01` marker (`19`), block-count ≤ device maximum (`1A`), a
+  running 16-bit payload checksum, the `F7` terminator (`1E`), the stored checksum nibbles
+  (`1F`/`20`/`21`), the **model letter vs the device** (`22`), then a **second pass that re-reads
+  flash and re-verifies the checksum** (`C8`). Only on full success does it write the EEPROM
+  version/model markers and `GOTO` the boot loader. **The device itself refuses a wrong-model or
+  bad-checksum image** — exactly the checks `lffirmware/codec.py` + `images.py` already run on the
+  host, so our pre-flight validation mirrors the unit's own gatekeeping rather than guessing.
+
+`PIC-18:LE:24:PIC-18` in Ghidra loads the same `--decode` output for cross-checking; the in-repo
+disassembler just makes these facts testable (`tests/test_pic18.py`) without a Ghidra dependency.
+
 ### Flashing — now in a separate beta tool, still NOT in the editor
 Writing this image to the device is the one genuinely **brick-risk** operation (an
 interrupted/incorrect write kills the unit). The protocol turned out to be simpler than feared:
