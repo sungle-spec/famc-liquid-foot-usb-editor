@@ -144,6 +144,10 @@ The **Command Programming** table sends up to 16 commands when the preset fires:
 2. For IA-work, pick an IA function (e.g. `IA ON Trig`) — the number column then holds the
    IA-slot number. Or skip the typing: **drag an IA-Slot from the Q-LIST onto the row**.
 3. The read-out at the row's end decodes what will actually be sent — a quick sanity check.
+4. **Not sure what a function does? Hover it.** Every entry in the Function list, and the function
+   selected on each row, has pop-up help. The names are the original editor's full labels — e.g.
+   `Page Button Display Start` is a start *index* into the Page's buttons (which button lands on
+   physical button #1), not an on/off switch.
 
 ### Set the preset's initial IA states
 

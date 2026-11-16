@@ -53,8 +53,10 @@ trailer = 16-bit sum of the payload nibbles (raw), hi nibble first
   image machine-readable *and* what makes patching technically possible; it is also why a
   corrupt-but-checksummed image is only stopped by the device's own bootloader. Treat custom images
   as brick-risk until a bricked-unit volunteer proves the path.
-- Entry vectors decode to three PIC18 `GOTO`s (reset `0x0000` → `0x1F800`, i.e. the boot-loader
-  region *above* the image, which is not part of the `.syx`; high/low interrupt → `0x1D6AE`/`0x1D4D0`).
+- The image starts with three PIC18 `GOTO`s (12+ v6.32): reset `0x0000` → `0x1F800`, i.e. the
+  boot-loader region *above* the image, which is not part of the `.syx`; `0x0004` → `0x1D6AE`, the
+  application start; `0x0008` → `0x1D4D0`, the interrupt handler. (An earlier note here called the
+  last two "high/low interrupt"; that was wrong — see "Inside the image".)
 - `python -m lffirmware --image X.syx --decode out.bin` writes the little-endian PIC18 memory image;
   Ghidra's `PIC-18:LE:24:PIC-18` language loads it and finds `Reset`, `HighInterrupt`, `LowInterrupt`
   and ~335 LCD strings (the unit's whole menu text table at `0x1E083…`, plus `Waiting`, `KEMPER`,
@@ -62,33 +64,79 @@ trailer = 16-bit sum of the payload nibbles (raw), hi nibble first
 
 ### Inside the image (`lffirmware/pic18.py`, 2026-11-16)
 
-A small, read-only PIC18 disassembler now lets us *read* the decoded image (never run or patch it).
-A recursive trace from the reset + interrupt vectors (bytes 0/4/8) decodes **>95 %** of every
-v6.32 image as reachable code with **zero decode failures** across all five models, and recovers
-~320 functions. What it shows:
+A small, read-only PIC18 disassembler lets us *read* the decoded image (it never runs or patches
+it). A recursive trace from the vectors decodes about **95 %** of every v6.32 image as reachable
+code with **zero decode failures** in all five models, and finds ~320 functions. `python -m
+lffirmware --image X.syx --inspect` prints the summary below for any image.
 
-- **Entry vectors.** `Reset` (byte 0) `GOTO 0x1F800` — the boot-loader region, which sits *above*
-  the application image and is **not** part of the `.syx`. This is why the hold-button rescue
-  always works: a bad application flash cannot touch the loader. High/low interrupt vectors
-  (4/8) `GOTO` into the image proper.
-- **The on-device command dispatcher** (one `XORLW` ladder on the received control byte) handles,
-  beyond the `C9/CA/CB/CC/CF` we already knew: **`C8` = enter firmware-receive from the running
-  app** (calls the same receiver the hold-button route reaches), `CD`/`CE` = diagnostic LCD modes,
-  **`D0` = reset config, `D1` = factory reset, `D2` = a data read-back/echo** loop. So there are
-  *two* ways into the flasher — the hardware rescue and sysex `C8` — the loader tool deliberately
-  documents but does not auto-trigger `C8`.
-- **The receiver validates before it commits**, with a distinct LCD/return error code per check:
-  model/version header byte vs the device's own identity (err `16`), command byte `08` (`17`),
-  sub-command `06` (`18`), header `01` marker (`19`), block-count ≤ device maximum (`1A`), a
-  running 16-bit payload checksum, the `F7` terminator (`1E`), the stored checksum nibbles
-  (`1F`/`20`/`21`), the **model letter vs the device** (`22`), then a **second pass that re-reads
-  flash and re-verifies the checksum** (`C8`). Only on full success does it write the EEPROM
-  version/model markers and `GOTO` the boot loader. **The device itself refuses a wrong-model or
-  bad-checksum image** — exactly the checks `lffirmware/codec.py` + `images.py` already run on the
-  host, so our pre-flight validation mirrors the unit's own gatekeeping rather than guessing.
+Everything in this section was read from the v6.32 application images. The boot loader is **not**
+in any `.syx`, so nothing here describes what it does — that is called out where it matters.
 
-`PIC-18:LE:24:PIC-18` in Ghidra loads the same `--decode` output for cross-checking; the in-repo
-disassembler just makes these facts testable (`tests/test_pic18.py`) without a Ghidra dependency.
+**Vectors.** `0x0000` reset → `GOTO 0x1F800` (boot loader, above the image). `0x0004` → the
+application start; nothing inside the image jumps there, so it is the boot loader's hand-off point
+(inferred). `0x0008` → the interrupt handler (PIC18 high-priority vector). `0x0018` (low-priority
+vector) is `BRA 0x0000`, i.e. unused.
+
+**How the unit takes an update.** One routine (`0x409C` in the 12+ image; same logic in all five)
+receives firmware. It has four call sites: two in the start-up code (one behind a button check,
+consistent with the manual's hold-B7-at-power-on), one that looks like the on-device menu
+(inferred), and one for editor control byte **`C8`** (new — see below). It then:
+
+1. shows `Firmware Waiting` and reads the frame from **whichever serial port has data** — the
+   code checks both, including the port the editor protocol runs on. (The 2013 editor used MIDI IN;
+   whether the editor cable also works is untested.)
+2. checks the frame as it arrives and **stores the image in external memory** through the port
+   latches. The application contains **no code that writes program flash** (no table-write
+   instruction anywhere, tested for every model), so receiving cannot damage the running firmware;
+3. after the last byte checks the `F7`, the checksum trailer and the model letter, then reads the
+   stored copy back and compares a second checksum;
+4. only if everything passes, writes an "update pending" record to EEPROM `0x3F5–0x3FD` (flag,
+   marker `D9`, version digits, model letter, block count) and jumps to the boot loader, which does
+   the actual flashing.
+
+**Error numbers.** A failed check shows `Firmware Failed` / `Error N` (decimal) for a few seconds
+and returns with the installed firmware unchanged. `python -m lffirmware --explain-error N`:
+
+| N | Check that failed |
+|---|---|
+| 1 | header stopped arriving |
+| 22 | frame byte 3 is not the unit's ID (`7C`) |
+| 23 / 24 | command bytes are not `08` / `06` |
+| 25 | second header byte (a flag) is not 0 or 1 |
+| 26 | block count is 0 or above **1007** (`0x3EF`; 1007 × 128 = `0x1F780`, just under the boot loader) |
+| 27 / 28 | data stopped arriving mid-image (per-byte timeout, roughly a tenth of a second on the MIDI port) |
+| 29 | checksum trailer stopped arriving |
+| 30 | no `F7` where the block count says the frame ends |
+| 31 / 32 | data sum, or trailer, is zero |
+| 33 | trailer ≠ 16-bit sum of the received nibbles |
+| 34 | model letter ≠ this unit's model |
+| 200 | stored copy failed read-back verification |
+
+`tests/test_firmware_inspect.py` re-derives this list from each real image and fails if it drifts.
+The 1007-block ceiling is v6.32's: one genuine old image (12+ v3.36) has 1008 blocks, so the host
+reports the limit (check 26) but does not refuse the file. The `08 06 …` header also turns out to
+be `01`, a 0/1 flag byte, then a **four**-nibble block count — the codec's "`01 00 00` + three
+nibbles" reads the same bytes.
+
+**What this means for safe loading.**
+- The loader runs the same checks on the host (`lffirmware/inspect.py::device_preflight`), so a
+  wrong-model, truncated or corrupt file is stopped before a byte is sent, and each check is shown
+  with the number the unit would display.
+- An interrupted or mangled *transfer* is caught by the unit (27–33) with nothing flashed.
+- The model letter is enforced by the unit itself (34) — but it is a header byte, so it only
+  protects against honest mix-ups, not a mislabelled image.
+- **Not known:** what the boot loader does if its copy to flash is interrupted, and whether the
+  power-on wait-for-firmware route still works when the application is damaged — the button check
+  we can see lives in the application's start-up code. Treat "a bricked unit can always be rescued"
+  as unproven.
+
+**Editor control bytes the firmware handles.** Its dispatcher compares the control byte against
+`C8`–`D2`. Known before: `C9` identify, `CA` session, `CB`/`CF` thru/stream start, `CC` stop, `D0`
+reset config, `D1` factory reset. New from the image: **`C8` enters firmware-wait** from the
+running application (no button hold needed; documented, not used by the loader). `CD`, `CE` and
+`D2` are handled too, but what they are for is not yet understood.
+
+`PIC-18:LE:24:PIC-18` in Ghidra loads the same `--decode` output for cross-checking.
 
 ### Flashing — now in a separate beta tool, still NOT in the editor
 Writing this image to the device is the one genuinely **brick-risk** operation (an

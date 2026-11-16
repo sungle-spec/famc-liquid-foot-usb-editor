@@ -466,14 +466,6 @@ class PresetCmdTableField(Field):
         if combo.findData(code) < 0:
             combo.addItem(f"Fn {code}", code)
 
-    def _update_func_tip(self, row) -> None:
-        """Hover help for the row's *selected* function (the closed combo)."""
-        from ..model.cmd_help import func_help
-        fc = self.funcs_c[row]
-        code = fc.currentData()
-        tip = func_help(code) if code is not None else ""
-        fc.setToolTip(f"{fc.currentText()} — {tip}" if tip else "")
-
     def load(self, values):
         self._values = values
         self._loading = True
@@ -1033,6 +1025,14 @@ class CommandTableField(Field):
     def _ensure_code(self, combo, code):
         if combo.findData(code) < 0:
             combo.addItem(f"Fn {code}", code)
+
+    def _update_func_tip(self, row) -> None:
+        """Hover help for the row's *selected* function (the closed combo)."""
+        from ..model.cmd_help import func_help
+        fc = self.funcs_c[row]
+        code = fc.currentData()
+        tip = func_help(code) if code is not None else ""
+        fc.setToolTip(f"{fc.currentText()} — {tip}" if tip else "")
 
     def load(self, values):
         self._values = values

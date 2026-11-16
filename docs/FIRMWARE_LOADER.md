@@ -9,10 +9,13 @@
 Firmware flashing is what bricked several units in the first place, which is why the editor
 itself has always kept *Load Firmware* disabled. This standalone tool exists for two reasons:
 
-1. **Recovery**: the LF+ has a documented rescue mode that works even when the main firmware is
-   dead — hold **B7 while powering on** and the unit *"waits for MIDI Firmware before doing
-   anything else"* (manual p.15, "Special Commands During Power Up"). A bricked unit fed the
-   correct-model firmware image through that mode has a real chance of coming back.
+1. **Recovery**: the LF+ has a documented rescue mode — hold **B7 while powering on** and the
+   unit *"waits for MIDI Firmware before doing anything else"* (manual p.15, "Special Commands
+   During Power Up"). A bricked unit fed the correct-model firmware image through that mode has a
+   chance of coming back. **Caveat (2026-11-16):** in the v6.32 images the button check for this
+   mode is in the application's start-up code, so it is unproven that the mode still works when
+   the application itself is damaged; the boot loader, which we cannot see, may or may not have
+   its own. A unit that shows nothing at all in this mode is not evidence the loader is wrong.
 2. **Updates** for working units, eventually — after the beta validation ladder is complete.
 
 ## What it does
@@ -29,14 +32,17 @@ itself has always kept *Load Firmware* disabled. This standalone tool exists for
   and the header wins. See [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#decoded-format-lffirmwarecodecpy).
 - Refuses model mismatches: the image's verified identity must match the model **you** select.
   Wrong-model firmware can permanently damage a unit.
-- **Mirrors the device's own acceptance checks** (2026-11-16). The firmware receiver was
-  disassembled (`lffirmware/pic18.py`); it validates a precise set of fields before it commits —
-  the command bytes, the header marker, the block count, the 16-bit checksum (which it verifies
-  *twice*, re-reading flash the second time), and the **model letter against the connected unit** —
-  and refuses a wrong-model or corrupt image with a distinct error code. The loader runs those same
-  checks on the host (**Inspect…** in the GUI, `--inspect` on the CLI) and shows each one against
-  the device's own error code, so a bad image is caught before any byte is sent rather than by the
-  unit mid-flash. See [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#inside-the-image-lffirmwarepic18py-2026-11-16).
+- **Runs the unit's own acceptance checks first** (2026-11-16). The unit's firmware receiver
+  was disassembled; it checks the ID and command bytes, a header flag, the block count, the frame
+  length, the 16-bit checksum and the **model letter**, then re-reads its stored copy, before it
+  hands anything to its boot loader. The loader makes the same checks on your computer
+  (**Inspect…** in the app, `--inspect` on the command line) and labels each with the number the
+  unit would show, so a bad file is caught before a byte is sent. See
+  [FIRMWARE_NOTES.md](FIRMWARE_NOTES.md#inside-the-image-lffirmwarepic18py-2026-11-16).
+- **Explains the unit's error numbers.** If the display shows `Firmware Failed` / `Error N`,
+  `python -m lffirmware --explain-error N` (or the bottom of the Inspect window) says which check
+  failed. Every one of those errors is raised before the boot loader is involved, so the firmware
+  already on the unit is unchanged — fix the cause and try again.
 - Sends the image the way the original editor did: **one sysex message over MIDI** (the device's
   MIDI DIN input — *not* the LF+ USB socket), ~82–86 s at DIN speed.
 - Keeps your computer awake during the send, records everything (including any device replies)
@@ -95,10 +101,11 @@ python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --dry-run     # verify 
 python -m lffirmware --image LF+12+_FIRM.syx --model 12+ --port "USB MIDI Interface"
 ```
 
-`--inspect` (read-only) prints the firmware version/model, the PIC18 entry vectors (and confirms
-the boot loader sits above the image, so a failed flash keeps the hold-button rescue), the
-code/data split, the recovered LCD string table, and the **device acceptance checks** mapped to
-the unit's own error codes — it exits non-zero if any host-checkable field would be rejected.
+`--inspect` (read-only) prints the firmware version/model, the PIC18 vectors (and whether they
+follow the layout of every FAMC release: reset to a boot loader above the image), the code/data
+split, whether the code can write program flash, the LCD string table, and the **unit's
+acceptance checks** with its error numbers — it exits non-zero if any check this computer can make
+fails. `--explain-error [N]` explains the number after `Firmware Failed / Error`.
 `--decode OUT.bin` (read-only) writes the image as raw little-endian PIC18 program memory for a
 disassembler. `--dry-run` performs every check and shows exactly what a real run would send — safe anywhere,
 no MIDI I/O. `--allow-unverified` is required for images not in the known-hash list.
