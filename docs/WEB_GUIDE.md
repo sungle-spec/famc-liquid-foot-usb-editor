@@ -180,6 +180,10 @@ The **Pages** tab is the graphical pedalboard editor:
   **Shift-drag copies** instead of swapping.
 - **Page Parameters** (bottom left) holds the page-wide settings: Status-LED colour, menu-button
   trigger, preset-button colours, forced IA map, and all-buttons-double-tap.
+  **IA Map to use for display** (also there) labels the 60 *IA Slot* choices through a map you pick
+  — a choice is "position N of whichever IA-Map is live when the page runs", so names only make
+  sense relative to a map. Auto uses the page's Force IA map, else Map 1; display only, nothing is
+  saved to the file.
 
 ### 8. Remap an IA-Map
 

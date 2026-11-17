@@ -150,6 +150,14 @@ hover help (`lfeditor/model/cmd_help.py`, desktop + web). Still unverified: whic
 is "System SnapShot Store" and which is "Restore". The original also shows a colour swatch, step
 name or page name beside these commands where we show the number — not built.
 
+**IA Map to Use for Display (tester question, 2026-11-17).** The original's Pages tab has a
+display-only dropdown of this name (a string in its binary; our diff notes confirm it writes no
+byte). The rebuild lacked it, so the 60 IA Slot choices were always labelled by IA-Slot number —
+wrong whenever the live map isn't 1-to-60. Added as **Page Parameters ▸ IA Map to use for display**
+(desktop + web; `name_sync.display_names`). Unverified against the original: whether it also
+relabels the board tiles (ours does) and what its default is (ours: the page's Force IA map, else
+Map 1).
+
 ## 5. REA/disassembly findings (2026-11-09)
 
 ### 5a. Every sysex frame the original builds (`scripts/extract_original_frames.py`)

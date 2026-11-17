@@ -173,6 +173,16 @@ On **Pages**, the board shows 12 buttons at a time exactly as the hardware arran
 tile onto another to swap the two buttons** (Shift-drag copies). The page-group navigator on
 the right flips between button groups 1–12 / 13–24 / … / 49–60.
 
+**What the IA Slot names mean.** An IA Slot choice `N` on a button is *position N of whichever
+IA-Map is live when the page runs* — the preset's map, or this page's **Force IA map** — not a fixed
+IA-Slot number. The editor can't know which map will be live, so the names beside the 60 choices
+come from the map picked in **Page Parameters ▸ IA Map to use for display** (the original editor
+has a dropdown of the same name). **Auto** (the default) uses this page's Force IA map if set,
+else Map 1, the default map — for which choice `N` is IA-Slot `N`, as before. **No map** labels
+choice `N` with IA-Slot `N`. Or pick any map. This only changes the labels you see: it is not
+stored in the file and never changes a button's saved value. Edits to a map on the IA-Maps tab, or
+to IA-Slot names, show here when you return to the Pages tab.
+
 ### Keep IA-Slot and Page names current
 
 The IA-Maps tab, the Preset tab's IA-state list and the Pages tab's *IA Slot* / *Page Select*

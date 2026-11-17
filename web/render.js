@@ -385,7 +385,12 @@ const LFRender = (() => {
   function renderPages(app, tab, idx) {
     const T = tab.type, pad2 = (n) => String(n).padStart(2, "0");
     const GROUP_SIZE = 12, NUM_GROUPS = Math.floor(tab.buttons / GROUP_SIZE);
-    const ia = app.rawNames(3), pages = app.rawNames(7), pageCount = pages.length || 50;
+    // The IA Slot choices are positions in whichever IA-Map is live when the page runs; label them via
+    // the chosen display map (display-only, like the original's "IA Map to Use for Display").
+    app.displayMap = app.displayMap || "auto";
+    const forceMap = () => app.get(T, idx, tab.params.force_ia_map_off);
+    let ia = app.displayNames(app.displayMap, forceMap());
+    const pages = app.rawNames(7), pageCount = pages.length || 50;
     const sysfns = tab.system_functions;
     const HELP = tab.help || {};
     let sel = 0, group = 0;
@@ -434,10 +439,28 @@ const LFRender = (() => {
     }
 
     // a plain 0..max byte spin (Menu trigger / Force IA map / IA-slot to trigger; 0 = none)
-    function intInput(off, max) {
+    function intInput(off, max, after) {
       const inp = el("input"); inp.type = "number"; inp.min = 0; inp.max = max; inp.value = app.get(T, idx, off);
-      inp.onchange = () => app.set(T, idx, off, parseInt(inp.value || "0", 10) & 0xFF);
+      inp.onchange = () => { app.set(T, idx, off, parseInt(inp.value || "0", 10) & 0xFF); if (after) after(); };
       return inp;
+    }
+
+    // re-label tiles + the open button's IA Slot list after the display map (or Force IA map) changed
+    function relabel() {
+      const next = app.displayNames(app.displayMap, forceMap());
+      if (JSON.stringify(next) === JSON.stringify(ia)) return;
+      ia = next; paintBoard(); renderDef();
+    }
+    function displayMapPicker() {
+      const s = el("select");
+      for (const [v, label] of app.displayMapOptions()) { const o = el("option", null, label); o.value = v; s.appendChild(o); }
+      if (![...s.options].some(o => o.value === app.displayMap)) app.displayMap = "auto";
+      s.value = app.displayMap;
+      s.title = "A button's IA Slot choice N means 'position N of whichever IA-Map is live when the page runs'. " +
+        "Pick a map here to label the 60 choices with the IA-Slots that map assigns. Display only — nothing is " +
+        "written to the file. Auto uses this page's Force IA map if set, else Map 1 (the default map).";
+      s.onchange = () => { app.displayMap = s.value; relabel(); };
+      return s;
     }
 
     function pageParams() {
@@ -447,7 +470,8 @@ const LFRender = (() => {
       body.appendChild(paramRow("Menu button trigger (0=B2+B3)", intInput(p.menu_trigger_off, 60)));
       body.appendChild(paramRow("Preset btn — selected", buildField(app, T, idx, { kind: "enum", offset: p.preset_btn_colors_off, nibble: "low", options: tab.preset_btn_color_names })));
       body.appendChild(paramRow("Preset btn — not selected", buildField(app, T, idx, { kind: "enum", offset: p.preset_btn_colors_off, nibble: "high", options: tab.preset_btn_color_names })));
-      body.appendChild(paramRow("Force IA map (0=none)", intInput(p.force_ia_map_off, 60)));
+      body.appendChild(paramRow("Force IA map (0=none)", intInput(p.force_ia_map_off, 60, relabel)));
+      body.appendChild(paramRow("IA Map to use for display", displayMapPicker()));
       body.appendChild(paramRow("IA-slot to trigger (0=none)", intInput(p.ia_slot_trig_num_off, 60)));
       body.appendChild(buildField(app, T, idx, { kind: "toggle", offset: p.force_mode_off, bitmask: p.all_btn_dbl_bit, label: "All buttons double-tap", help: HELP["All buttons double-tap"] }));
       sec.appendChild(body); return sec;

@@ -126,6 +126,27 @@ class Session:
             self.dirty = True
         return True
 
+    # ---- Pages: "IA Map to use for display" (shared with the desktop: name_sync.py) ----
+    @staticmethod
+    def _display_choice(choice: str):
+        from . import name_sync
+        if choice in (name_sync.DISPLAY_MAP_AUTO, name_sync.DISPLAY_MAP_NONE):
+            return choice
+        try:
+            return int(choice)
+        except (TypeError, ValueError):
+            return name_sync.DISPLAY_MAP_AUTO
+
+    def display_names(self, choice: str = "auto", force_ia_map: int = 0) -> list:
+        """The 60 labels for the Pages tab's IA Slot choices under the chosen display map."""
+        from . import name_sync
+        return name_sync.display_names(self.dump, self._display_choice(choice), int(force_ia_map))
+
+    def display_map_options(self) -> list:
+        """[[choice, label], …] for the display-map picker; choice is a string for the browser."""
+        from . import name_sync
+        return [[str(c), label] for c, label in name_sync.display_map_options(self.dump)]
+
     # ---- Pages: decode a button-function byte to its display name ----
     def decode_button(self, byte: int) -> str:
         from .model.page import decode_button_function

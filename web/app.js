@@ -24,6 +24,9 @@ const App = {
   names(t) { const p = this.session.names(t); const a = p.toJs(); p.destroy(); return a; },
   rawNames(t) { const p = this.session.raw_names(t); const a = p.toJs(); p.destroy(); return a; },
   decodeButton(b) { return this.session.decode_button(b); },
+  // "IA Map to use for display" (Pages): the 60 IA Slot labels under a chosen map, and the picker's options
+  displayNames(choice, force) { const p = this.session.display_names(choice, force); const a = p.toJs(); p.destroy(); return a; },
+  displayMapOptions() { const p = this.session.display_map_options(); const a = p.toJs(); p.destroy(); return a; },
   // command-table helpers (kept identical to the desktop CommandTableField)
   channelNames() { const p = this.session.channel_names(); const a = p.toJs(); p.destroy(); return a; },
   midiTypes() { const p = this.session.midi_msg_types(); const a = p.toJs({ dict_converter: Object.fromEntries }); p.destroy(); return a; },

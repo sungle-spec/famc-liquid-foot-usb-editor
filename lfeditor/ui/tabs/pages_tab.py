@@ -30,7 +30,8 @@ from ...model.page import (
     decode_button_function, PAGE_SYSTEM_FUNCTIONS,
 )
 from ...model.config import COLOR_NAMES
-from ...name_sync import ia_names, page_names
+from ...name_sync import (
+    DISPLAY_MAP_AUTO, display_map_options, display_names, page_names)
 
 GROUP_SIZE = 12          # one page-group = 12 physical buttons (4 cols × 3 rows)
 NUM_GROUPS = NUM_BUTTONS // GROUP_SIZE  # 5 groups, start values 1/13/25/37/49
@@ -185,8 +186,10 @@ class PagesTab(QWidget):
         self._rec = None
         self._sel = 0           # absolute selected button index
         self._group = 0         # current page-group shown on the board
-        self._ia: list[str] = []
+        self._ia: list[str] = []            # the 60 IA-Slot labels shown (via the display map)
         self._page_names: list[str] = []
+        self._dump = None
+        self._display_choice = DISPLAY_MAP_AUTO   # "IA Map to use for display" (not stored in the file)
 
         split = QSplitter(Qt.Horizontal)
         split.setHandleWidth(0)
@@ -303,6 +306,19 @@ class PagesTab(QWidget):
                 form.addRow(lab, w)
             else:
                 form.addRow(w)
+        # "IA Map to use for display" — like the original editor's dropdown of the same name, this
+        # only chooses which IA-Map labels the 60 IA Slot choices; it is not stored in the file.
+        self.display_map_combo = QComboBox()
+        self.display_map_combo.setMaximumWidth(250)
+        self.display_map_combo.currentIndexChanged.connect(self._on_display_map_changed)
+        tip = ("A button's IA Slot choice N means 'position N of whichever IA-Map is live when the "
+               "page runs'. Pick a map here to label the 60 choices with the IA-Slots that map "
+               "assigns. Display only — nothing is written to the file. Auto uses this page's "
+               "Force IA map if set, else Map 1 (the default map).")
+        self.display_map_combo.setToolTip(tip)
+        dm_label = QLabel("IA Map to use for display")
+        dm_label.setToolTip(tip)
+        form.addRow(dm_label, self.display_map_combo)
         return section_panel("Page Parameters", body)
 
     def _button_panel(self) -> QWidget:
@@ -362,10 +378,52 @@ class PagesTab(QWidget):
         return section_panel("Page Button Definition", body)
 
     # --- data ---
+    # --- "IA Map to use for display" (see lfeditor/name_sync.py) ---
+    def _force_ia_map(self) -> int:
+        return self._rec.values[FORCE_IA_MAP_OFF] if self._rec is not None else 0
+
+    def _populate_display_map_combo(self) -> None:
+        cb = self.display_map_combo
+        opts = display_map_options(self._dump)
+        cb.blockSignals(True)
+        cb.clear()
+        for choice, label in opts:
+            cb.addItem(label, choice)
+        i = cb.findData(self._display_choice)
+        if i < 0:                                   # the chosen map no longer exists
+            self._display_choice = DISPLAY_MAP_AUTO
+            i = 0
+        cb.setCurrentIndex(i)
+        cb.blockSignals(False)
+
+    def _on_display_map_changed(self, _i=None) -> None:
+        self._display_choice = self.display_map_combo.currentData()
+        self._apply_display_map()
+
+    def _apply_display_map(self) -> None:
+        """Recompute the 60 IA-Slot labels for the chosen map; redraw only if they changed."""
+        if self._dump is None:
+            return
+        new = display_names(self._dump, self._display_choice, self._force_ia_map())
+        if new == self._ia:
+            return
+        self._ia = new
+        if self._rec is not None:
+            self._refresh_board()
+            self._select(self._sel)
+
+    def showEvent(self, event):
+        # a map may have been edited on the IA-Maps tab (or names on IA-Slot) since we were shown
+        super().showEvent(event)
+        if self._dump is not None:
+            self._apply_display_map()
+
     def set_dump(self, dump) -> None:
+        self._dump = dump
         self._records = dump.records(self.type_)
         self._presets = [(getattr(r, "name", "") or "").strip() for r in dump.presets]
-        self._ia = ia_names(dump)
+        self._populate_display_map_combo()
+        self._ia = display_names(dump, self._display_choice, 0)
         self._page_names = page_names(dump)
         self.rail.set_records(self._records)
         self.header.set_count(len(self._records))
@@ -375,7 +433,9 @@ class PagesTab(QWidget):
     def refresh_names(self, dump, types) -> None:
         """Re-read IA-Slot / Page names (see lfeditor/name_sync.py) and redraw the button tiles and
         the Function 1/2 value dropdowns, keeping the selected button and its function values."""
-        self._ia = ia_names(dump)
+        self._dump = dump
+        self._populate_display_map_combo()          # map names may have changed too
+        self._ia = display_names(dump, self._display_choice, self._force_ia_map())
         self._page_names = page_names(dump)
         if self._rec is not None:
             self._refresh_board()
@@ -394,6 +454,8 @@ class PagesTab(QWidget):
         self._rec = self._records[idx]
         self.header.set_index(idx)
         self.header.bind(self._rec.values)
+        if self._dump is not None:                  # Auto follows this page's Force IA map
+            self._ia = display_names(self._dump, self._display_choice, self._force_ia_map())
         self._refresh_board()
         for f in self._param_fields:
             f.load(self._rec.values)
@@ -567,6 +629,7 @@ class PagesTab(QWidget):
     def _mark(self):
         self.window().mark_dirty()
         self.rail.set_records(self._records)
+        self._apply_display_map()                   # e.g. the Force IA map field was just edited
         note = getattr(self.window(), "note_names_edit", None)
         if note is not None:
             note()
