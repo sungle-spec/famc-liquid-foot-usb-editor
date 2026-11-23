@@ -31,7 +31,7 @@ from ...model.page import (
 )
 from ...model.config import COLOR_NAMES
 from ...name_sync import (
-    DISPLAY_MAP_AUTO, display_map_options, display_names, page_names)
+    DISPLAY_MAP_AUTO, DISPLAY_MAP_PRESET, display_map_options, display_names, page_names)
 
 GROUP_SIZE = 12          # one page-group = 12 physical buttons (4 cols × 3 rows)
 NUM_GROUPS = NUM_BUTTONS // GROUP_SIZE  # 5 groups, start values 1/13/25/37/49
@@ -314,7 +314,8 @@ class PagesTab(QWidget):
         tip = ("A button's IA Slot choice N means 'position N of whichever IA-Map is live when the "
                "page runs'. Pick a map here to label the 60 choices with the IA-Slots that map "
                "assigns. Display only — nothing is written to the file. Auto uses this page's "
-               "Force IA map if set, else Map 1 (the default map).")
+               "Force IA map if set, else Map 1 (the default map). 'Per last selected Preset' uses the map "
+               "of the Preset you last had open on the Presets tab (greyed out until a file is open).")
         self.display_map_combo.setToolTip(tip)
         dm_label = QLabel("IA Map to use for display")
         dm_label.setToolTip(tip)
@@ -382,19 +383,30 @@ class PagesTab(QWidget):
     def _force_ia_map(self) -> int:
         return self._rec.values[FORCE_IA_MAP_OFF] if self._rec is not None else 0
 
+    def _last_preset(self):
+        """The Preset most recently shown on the Presets tab (None until a file is open)."""
+        get = getattr(self.window(), "last_selected_preset", None)
+        return get() if get is not None else None
+
     def _populate_display_map_combo(self) -> None:
         cb = self.display_map_combo
-        opts = display_map_options(self._dump)
+        opts = display_map_options(self._dump, self._last_preset())
         cb.blockSignals(True)
         cb.clear()
-        for choice, label in opts:
+        for choice, label, enabled in opts:
             cb.addItem(label, choice)
+            if not enabled:                         # "Per last selected Preset" before any preset
+                cb.model().item(cb.count() - 1).setEnabled(False)
         i = cb.findData(self._display_choice)
-        if i < 0:                                   # the chosen map no longer exists
+        if i < 0 or not cb.model().item(i).isEnabled():   # chosen map gone / no preset selected
             self._display_choice = DISPLAY_MAP_AUTO
             i = 0
         cb.setCurrentIndex(i)
         cb.blockSignals(False)
+
+    def _display_names(self) -> list[str]:
+        return display_names(self._dump, self._display_choice, self._force_ia_map(),
+                             self._last_preset())
 
     def _on_display_map_changed(self, _i=None) -> None:
         self._display_choice = self.display_map_combo.currentData()
@@ -404,7 +416,7 @@ class PagesTab(QWidget):
         """Recompute the 60 IA-Slot labels for the chosen map; redraw only if they changed."""
         if self._dump is None:
             return
-        new = display_names(self._dump, self._display_choice, self._force_ia_map())
+        new = self._display_names()
         if new == self._ia:
             return
         self._ia = new
@@ -416,6 +428,7 @@ class PagesTab(QWidget):
         # a map may have been edited on the IA-Maps tab (or names on IA-Slot) since we were shown
         super().showEvent(event)
         if self._dump is not None:
+            self._populate_display_map_combo()      # the last selected Preset may have changed
             self._apply_display_map()
 
     def set_dump(self, dump) -> None:
@@ -423,7 +436,7 @@ class PagesTab(QWidget):
         self._records = dump.records(self.type_)
         self._presets = [(getattr(r, "name", "") or "").strip() for r in dump.presets]
         self._populate_display_map_combo()
-        self._ia = display_names(dump, self._display_choice, 0)
+        self._ia = self._display_names()
         self._page_names = page_names(dump)
         self.rail.set_records(self._records)
         self.header.set_count(len(self._records))
@@ -435,7 +448,7 @@ class PagesTab(QWidget):
         the Function 1/2 value dropdowns, keeping the selected button and its function values."""
         self._dump = dump
         self._populate_display_map_combo()          # map names may have changed too
-        self._ia = display_names(dump, self._display_choice, self._force_ia_map())
+        self._ia = self._display_names()
         self._page_names = page_names(dump)
         if self._rec is not None:
             self._refresh_board()
@@ -455,7 +468,7 @@ class PagesTab(QWidget):
         self.header.set_index(idx)
         self.header.bind(self._rec.values)
         if self._dump is not None:                  # Auto follows this page's Force IA map
-            self._ia = display_names(self._dump, self._display_choice, self._force_ia_map())
+            self._ia = self._display_names()
         self._refresh_board()
         for f in self._param_fields:
             f.load(self._rec.values)

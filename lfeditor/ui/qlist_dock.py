@@ -47,6 +47,7 @@ class QListDock(QDockWidget):
         self._on_pick_type = on_pick_type  # (type) -> switch to that type's tab
         self._type = None
         self._records: list = []
+        self._names_sig: tuple = ()        # names as last drawn, so refresh_if_changed() can skip
         self.setObjectName("qlist")
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable
@@ -96,10 +97,36 @@ class QListDock(QDockWidget):
         self._apply_filter(self.filter.text())
 
     def refresh(self) -> None:
+        """Redraw the list from the current records, keeping the highlighted row and scroll
+        position (a rename must show here at once, without losing your place)."""
+        cur = self.list.currentItem()
+        keep = cur.data(Qt.UserRole) if cur is not None else None
+        scroll = self.list.verticalScrollBar().value()
         self.show_type(self._type)
+        if keep is not None:
+            for r in range(self.list.count()):
+                if self.list.item(r).data(Qt.UserRole) == keep:
+                    self.list.setCurrentRow(r)       # itemClicked is not emitted: no jump
+                    break
+        self.list.verticalScrollBar().setValue(scroll)
+
+    def _signature(self) -> tuple:
+        return tuple((r.number, (getattr(r, "name", "") or "").strip()) for r in self._records)
+
+    def refresh_if_changed(self) -> bool:
+        """Cheap check after any edit: redraw only if a listed record was renamed, added or removed."""
+        dump = self._get_dump()
+        recs = dump.records(self._type) if (dump is not None and self._type is not None) else []
+        if recs is not self._records:
+            self._records = recs
+        if self._signature() == self._names_sig:
+            return False
+        self.refresh()
+        return True
 
     def _apply_filter(self, text: str) -> None:
         text = text.strip().lower()
+        self._names_sig = self._signature()
         self.list.clear()
         for rec in self._records:
             name = (getattr(rec, "name", "") or "").strip()

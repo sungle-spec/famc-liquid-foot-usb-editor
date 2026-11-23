@@ -58,9 +58,12 @@ def test_unassigned_or_out_of_range_cells_are_blank_not_a_crash():
 def test_picker_options_list_auto_none_and_every_map():
     d = _dump()
     opts = ns.display_map_options(d)
-    assert [c for c, _ in opts[:2]] == [ns.DISPLAY_MAP_AUTO, ns.DISPLAY_MAP_NONE]
-    assert len(opts) == 2 + len(d.records(8))
-    assert opts[2][1].startswith("Map 001")
+    assert [c for c, _l, _e in opts[:3]] == [ns.DISPLAY_MAP_AUTO, ns.DISPLAY_MAP_PRESET, ns.DISPLAY_MAP_NONE]
+    assert len(opts) == 3 + len(d.records(8))
+    assert opts[3][1].startswith("Map 001") and all(e for _c, _l, e in opts[:1] + opts[2:])
+    assert opts[1][2] is False and "none selected" in opts[1][1]      # greyed out without a preset
+    on = ns.display_map_options(d, d.records(1)[0])
+    assert on[1][2] is True and "#1" in on[1][1] and "Map" in on[1][1]
 
 
 # ---- web API ----
@@ -74,8 +77,15 @@ def test_web_session_exposes_the_same_labels():
     assert s.display_names("auto", 2)[0] == "FUZZ"        # force map 2 -> map record 1
     assert s.display_names("none", 0)[0] == s.raw_names(3)[0]
     assert s.display_names("garbage", 0) == s.display_names("auto", 0)
+    # per last selected Preset: preset 1 uses Map 2 -> position 1 is IA-Slot 5
+    from lfeditor.model.preset import IA_SLOT_MAP_OFF
+    s.set(1, 0, IA_SLOT_MAP_OFF, 1)
+    assert s.display_names("preset", 0, 0)[0] == "FUZZ"
+    assert s.display_names("preset", 0, -1)[0] == s.display_names("auto", 0)[0]   # no preset: falls back
     opts = s.display_map_options()
-    assert opts[0][0] == "auto" and opts[1][0] == "none" and opts[2][0] == "0"
+    assert [o[0] for o in opts[:4]] == ["auto", "preset", "none", "0"]
+    assert opts[1][2] is False                                        # no preset passed -> greyed out
+    assert s.display_map_options(0)[1][2] is True
 
 
 # ---- desktop Pages tab ----
@@ -119,7 +129,7 @@ def test_desktop_picker_relabels_the_ia_slot_list_without_touching_bytes(win):
     d.records(8)[1].values[MAP_OFF + 0] = 4
     win.refresh_record_names()
     cb = pages.display_map_combo
-    assert cb.count() == 2 + len(d.records(8))
+    assert cb.count() == 3 + len(d.records(8))
     before = list(pages._rec.values)
     cb.setCurrentIndex(cb.findData(1))                  # Map 002
     assert _ia_choice_texts(pages)[0] == "(001) FUZZ"
@@ -165,3 +175,47 @@ def test_stored_bytes_unchanged_by_picking_a_map(win):
     for i in range(min(cb.count(), 6)):
         cb.setCurrentIndex(i)
     assert [list(r.values) for r in win.dump.records(7)] == snap
+
+
+# ---- "Per last selected Preset" ----
+def test_per_preset_uses_the_presets_own_map_and_ignores_force_ia_map():
+    from lfeditor.model.preset import IA_SLOT_MAP_OFF
+    d = _dump()
+    _name_slot(d, 4, "FUZZ")
+    d.records(8)[1].values[MAP_OFF + 0] = 4
+    p = d.records(1)[2]
+    p.values[IA_SLOT_MAP_OFF] = 1                       # preset 3 uses Map 2
+    assert ns.display_names(d, ns.DISPLAY_MAP_PRESET, 0, p)[0] == "FUZZ"
+    assert ns.display_names(d, ns.DISPLAY_MAP_PRESET, 7, p)[0] == "FUZZ"     # a Force IA map does not override
+    assert ns.display_names(d, ns.DISPLAY_MAP_PRESET, 0, None) == ns.display_names(d, ns.DISPLAY_MAP_AUTO, 0)
+    p.values[IA_SLOT_MAP_OFF] = 200                     # a corrupt/out-of-range map byte: Map 1, no crash
+    assert ns.display_names(d, ns.DISPLAY_MAP_PRESET, 0, p) == ns.display_names(d, ns.DISPLAY_MAP_AUTO, 0)
+
+
+def test_desktop_per_preset_follows_the_last_selected_preset(win):
+    from lfeditor.model.preset import IA_SLOT_MAP_OFF
+    from lfeditor.ui.app import TAB_ORDER
+    pages, d = win.pages, win.dump
+    _name_slot(d, 4, "FUZZ")
+    d.records(8)[1].values[MAP_OFF + 0] = 4
+    presets = win.tab_widgets[TAB_ORDER.index("Presets")]
+    d.records(1)[5].values[IA_SLOT_MAP_OFF] = 1         # preset 6 -> Map 2; the rest use Map 1
+    cb = pages.display_map_combo
+    i = cb.findData(ns.DISPLAY_MAP_PRESET)
+    assert cb.model().item(i).isEnabled()               # a file is open -> a preset is selected
+    cb.setCurrentIndex(i)
+    assert pages._ia[0] != "FUZZ"                       # preset 1 (Map 1) is the last selected
+    presets._goto(5)                                    # the user opens preset 6 on the Presets tab
+    win.tabs.setCurrentIndex(TAB_ORDER.index("Pages"))  # ...and comes back to Pages
+    pages._populate_display_map_combo()                  # what showEvent does on returning to Pages
+    pages._apply_display_map()
+    assert pages._ia[0] == "FUZZ"
+    assert "#6" in cb.itemText(cb.findData(ns.DISPLAY_MAP_PRESET))
+
+
+def test_desktop_per_preset_is_greyed_out_with_no_file(qapp, isolated_qsettings):
+    from lfeditor.ui.app import MainWindow, TAB_ORDER
+    w = MainWindow()
+    assert w.last_selected_preset() is None
+    pages = w.tab_widgets[TAB_ORDER.index("Pages")]
+    assert pages._last_preset() is None

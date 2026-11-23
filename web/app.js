@@ -25,8 +25,9 @@ const App = {
   rawNames(t) { const p = this.session.raw_names(t); const a = p.toJs(); p.destroy(); return a; },
   decodeButton(b) { return this.session.decode_button(b); },
   // "IA Map to use for display" (Pages): the 60 IA Slot labels under a chosen map, and the picker's options
-  displayNames(choice, force) { const p = this.session.display_names(choice, force); const a = p.toJs(); p.destroy(); return a; },
-  displayMapOptions() { const p = this.session.display_map_options(); const a = p.toJs(); p.destroy(); return a; },
+  // preset = the Presets tab's current record (the "last selected Preset"), or -1 before a file is open
+  displayNames(choice, force, preset) { const p = this.session.display_names(choice, force, preset); const a = p.toJs(); p.destroy(); return a; },
+  displayMapOptions(preset) { const p = this.session.display_map_options(preset); const a = p.toJs(); p.destroy(); return a; },
   // command-table helpers (kept identical to the desktop CommandTableField)
   channelNames() { const p = this.session.channel_names(); const a = p.toJs(); p.destroy(); return a; },
   midiTypes() { const p = this.session.midi_msg_types(); const a = p.toJs({ dict_converter: Object.fromEntries }); p.destroy(); return a; },
@@ -225,7 +226,7 @@ function buildRecordHeader(tab) {
     const nl = document.createElement("span"); nl.className = "fieldlabel"; nl.textContent = "Name";
     const name = document.createElement("input"); name.className = "lcd name"; name.maxLength = 16;
     name.value = App.getStr(t, i, 0, 16);
-    name.onchange = () => { App.setStr(t, i, 0, 16, name.value); };
+    name.onchange = () => { App.setStr(t, i, 0, 16, name.value); refreshQlist(true); };   // the Q-LIST shows names
     const kl = document.createElement("span"); kl.className = "fieldlabel"; kl.textContent = "Nick";
     const nick = document.createElement("input"); nick.className = "lcd nick"; nick.maxLength = 8;
     nick.value = App.getStr(t, i, 16, 8);
@@ -331,6 +332,7 @@ function refreshQlist(keepType) {
   if (!keepType || App.qlistType == null) App.qlistType = isRecordTab(t) ? t.type : (App.qlistType || 1);
   const qt = App.qlistType;
   const prevFilter = dock.querySelector(".qsearch")?.value || "";
+  const prevScroll = dock.querySelector(".qitems")?.scrollTop || 0;   // keep your place across a rename
   dock.innerHTML = "";
   const head = document.createElement("div"); head.className = "qtitle"; head.textContent = "Q-LIST — drag onto a slot";
   const typeSel = document.createElement("select"); typeSel.className = "qtype";
@@ -353,6 +355,7 @@ function refreshQlist(keepType) {
   };
   search.oninput = () => fill(search.value); fill(prevFilter);
   dock.append(head, typeSel, search, list);
+  list.scrollTop = prevScroll;
 }
 
 // ---------------------------------------------------------------- multi-apply (called from render.js toggles)

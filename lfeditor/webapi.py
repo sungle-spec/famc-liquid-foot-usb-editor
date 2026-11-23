@@ -130,22 +130,30 @@ class Session:
     @staticmethod
     def _display_choice(choice: str):
         from . import name_sync
-        if choice in (name_sync.DISPLAY_MAP_AUTO, name_sync.DISPLAY_MAP_NONE):
+        if choice in (name_sync.DISPLAY_MAP_AUTO, name_sync.DISPLAY_MAP_NONE,
+                      name_sync.DISPLAY_MAP_PRESET):
             return choice
         try:
             return int(choice)
         except (TypeError, ValueError):
             return name_sync.DISPLAY_MAP_AUTO
 
-    def display_names(self, choice: str = "auto", force_ia_map: int = 0) -> list:
+    def _preset(self, preset_idx):
+        """The Preset record at `preset_idx` (0-based, as the browser tracks it), or None."""
+        recs = self.dump.records(1) if self.dump else []
+        return recs[preset_idx] if isinstance(preset_idx, int) and 0 <= preset_idx < len(recs) else None
+
+    def display_names(self, choice: str = "auto", force_ia_map: int = 0, preset_idx: int = -1) -> list:
         """The 60 labels for the Pages tab's IA Slot choices under the chosen display map."""
         from . import name_sync
-        return name_sync.display_names(self.dump, self._display_choice(choice), int(force_ia_map))
+        return name_sync.display_names(self.dump, self._display_choice(choice), int(force_ia_map),
+                                       self._preset(preset_idx))
 
-    def display_map_options(self) -> list:
-        """[[choice, label], …] for the display-map picker; choice is a string for the browser."""
+    def display_map_options(self, preset_idx: int = -1) -> list:
+        """[[choice, label, enabled], …] for the display-map picker; choice is a string for the browser."""
         from . import name_sync
-        return [[str(c), label] for c, label in name_sync.display_map_options(self.dump)]
+        return [[str(c), label, enabled] for c, label, enabled
+                in name_sync.display_map_options(self.dump, self._preset(preset_idx))]
 
     # ---- Pages: decode a button-function byte to its display name ----
     def decode_button(self, byte: int) -> str:

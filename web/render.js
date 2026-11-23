@@ -389,7 +389,8 @@ const LFRender = (() => {
     // the chosen display map (display-only, like the original's "IA Map to Use for Display").
     app.displayMap = app.displayMap || "auto";
     const forceMap = () => app.get(T, idx, tab.params.force_ia_map_off);
-    let ia = app.displayNames(app.displayMap, forceMap());
+    const lastPreset = () => (app.recIndex && app.recIndex["Presets"]) || 0;   // the Presets tab's current record
+    let ia = app.displayNames(app.displayMap, forceMap(), lastPreset());
     const pages = app.rawNames(7), pageCount = pages.length || 50;
     const sysfns = tab.system_functions;
     const HELP = tab.help || {};
@@ -447,18 +448,19 @@ const LFRender = (() => {
 
     // re-label tiles + the open button's IA Slot list after the display map (or Force IA map) changed
     function relabel() {
-      const next = app.displayNames(app.displayMap, forceMap());
+      const next = app.displayNames(app.displayMap, forceMap(), lastPreset());
       if (JSON.stringify(next) === JSON.stringify(ia)) return;
       ia = next; paintBoard(); renderDef();
     }
     function displayMapPicker() {
       const s = el("select");
-      for (const [v, label] of app.displayMapOptions()) { const o = el("option", null, label); o.value = v; s.appendChild(o); }
-      if (![...s.options].some(o => o.value === app.displayMap)) app.displayMap = "auto";
+      for (const [v, label, enabled] of app.displayMapOptions(lastPreset())) { const o = el("option", null, label); o.value = v; o.disabled = !enabled; s.appendChild(o); }
+      if (![...s.options].some(o => o.value === app.displayMap && !o.disabled)) app.displayMap = "auto";
       s.value = app.displayMap;
       s.title = "A button's IA Slot choice N means 'position N of whichever IA-Map is live when the page runs'. " +
         "Pick a map here to label the 60 choices with the IA-Slots that map assigns. Display only — nothing is " +
-        "written to the file. Auto uses this page's Force IA map if set, else Map 1 (the default map).";
+        "written to the file. Auto uses this page's Force IA map if set, else Map 1 (the default map). " +
+        "'Per last selected Preset' uses the map of the Preset you last had open on the Presets tab.";
       s.onchange = () => { app.displayMap = s.value; relabel(); };
       return s;
     }

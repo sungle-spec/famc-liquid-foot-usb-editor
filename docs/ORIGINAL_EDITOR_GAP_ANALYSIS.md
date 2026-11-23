@@ -158,6 +158,14 @@ wrong whenever the live map isn't 1-to-60. Added as **Page Parameters ▸ IA Map
 relabels the board tiles (ours does) and what its default is (ours: the page's Force IA map, else
 Map 1).
 
+**Q-LIST stayed stale after a rename (tester report, 2026-11-23).** The dock had a `refresh()` that
+nothing called, so a renamed record kept its old name there until you switched tabs or reloaded —
+Edit ▸ Refresh Names didn't touch it either. It now refreshes on every edit that changes a name
+(via `mark_dirty`), on Refresh Names, and keeps the highlighted row and scroll position; the web
+Q-LIST does the same. This is independent of the Name-updates setting, which governs the cached
+pickers (IA-Maps, Preset IA-state list, Pages dropdowns).
+**Per last selected Preset** was added to the Pages display-map picker at the same tester's request.
+
 ## 5. REA/disassembly findings (2026-11-09)
 
 ### 5a. Every sysex frame the original builds (`scripts/extract_original_frames.py`)

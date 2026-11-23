@@ -178,12 +178,18 @@ IA-Map is live when the page runs* — the preset's map, or this page's **Force 
 IA-Slot number. The editor can't know which map will be live, so the names beside the 60 choices
 come from the map picked in **Page Parameters ▸ IA Map to use for display** (the original editor
 has a dropdown of the same name). **Auto** (the default) uses this page's Force IA map if set,
-else Map 1, the default map — for which choice `N` is IA-Slot `N`, as before. **No map** labels
+else Map 1, the default map — for which choice `N` is IA-Slot `N`, as before. **Per last selected Preset** uses the IA-Map of the Preset you last had open on the Presets tab (shown in
+the picker, e.g. "#22 KARMA for Triton → Map 009"), so while you work in the context of a preset the
+labels are the ones that preset will actually use; it is greyed out until a file is open, and it
+ignores this page's Force IA map (Auto is the one that follows it). **No map** labels
 choice `N` with IA-Slot `N`. Or pick any map. This only changes the labels you see: it is not
 stored in the file and never changes a button's saved value. Edits to a map on the IA-Maps tab, or
 to IA-Slot names, show here when you return to the Pages tab.
 
 ### Keep IA-Slot and Page names current
+
+The **Q-LIST** always shows current names: rename a record (Name box, then Enter or click away) and
+its Q-LIST row changes at once, in every mode below, keeping your place in the list.
 
 The IA-Maps tab, the Preset tab's IA-state list and the Pages tab's *IA Slot* / *Page Select*
 dropdowns list records by name. By default (the original behaviour) they only pick up a rename

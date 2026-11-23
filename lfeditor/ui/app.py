@@ -337,8 +337,15 @@ class MainWindow(QMainWindow):
             refresh = getattr(w, "refresh_names", None)
             if refresh is not None:
                 refresh(self.dump, name_sync.NAME_TYPES)
+        self.qlist.refresh()
         self._name_sig = sig
         return True
+
+    def last_selected_preset(self):
+        """The Preset record most recently shown on the Presets tab, or None (no file / no presets).
+        Used by the Pages tab's "Per last selected Preset" display map."""
+        presets = self.tab_widgets[TAB_ORDER.index("Presets")]
+        return getattr(presets, "_rec", None) if self.dump is not None else None
 
     def _on_name_timer(self):
         if self.name_sync_mode() == name_sync.MODE_AUTO:   # defensive: never act outside Automatic
@@ -1248,6 +1255,11 @@ class MainWindow(QMainWindow):
     def mark_dirty(self):
         self._dirty = True
         self._update_title()
+        # Every edit funnels through here: a renamed record must show in the Q-LIST immediately,
+        # whatever the Name-updates setting (that setting is for the cached pickers, not this list).
+        qlist = getattr(self, "qlist", None)
+        if qlist is not None:
+            qlist.refresh_if_changed()
 
     def _update_title(self):
         name = os.path.basename(self.path) if self.path else "untitled"
