@@ -977,11 +977,15 @@ class CommandTableField(Field):
         hh.setMinimumSectionSize(44)
         hh.setSectionResizeMode(0, QHeaderView.Interactive)   # Function
         hh.setSectionResizeMode(1, QHeaderView.Interactive)   # MIDI device
-        hh.setSectionResizeMode(2, QHeaderView.Stretch)       # Cmd (fills wide tables)
-        hh.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        # Every column is user-resizable (drag a header boundary); Stretch/ResizeToContents modes
+        # would lock the boundary. The last column absorbs spare width in a wide panel.
+        for c in range(5):
+            hh.setSectionResizeMode(c, QHeaderView.Interactive)
+        hh.setStretchLastSection(True)
         self.w.setColumnWidth(0, 176)   # fits "Page Button Display Start" / "Set Status#1 LED CLR"
         self.w.setColumnWidth(1, 78)
+        self.w.setColumnWidth(2, 132)   # fits "Channel Pressure"
+        self.w.setColumnWidth(3, 80)
         self.w.setMinimumHeight(min(self.count, 12) * 24 + 28)
         self.funcs_c, self.midis, self.cmds, self.d1s, self.d2s = [], [], [], [], []
         for r in range(self.count):

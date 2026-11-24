@@ -225,8 +225,12 @@ table.cmd th, table.cmd td { border:1px solid var(--border); padding:1px 3px; te
 table.cmd th { background:var(--panel-light); color:var(--text-dim); font-weight:600; padding:4px 6px; }
 table.cmd td { height:24px; }
 table.cmd td select, table.cmd td input { width:100%; }
+table.cmd { table-layout:fixed; min-width:100%; }
+.cmdwrap { overflow-x:auto; }
+table.cmd th { position:relative; }
+table.cmd .colgrip { position:absolute; top:0; right:-3px; width:7px; height:100%; cursor:col-resize; z-index:1; touch-action:none; }
 table.cmd col.c-fn { width:176px; } table.cmd col.c-midi { width:78px; }
-table.cmd col.c-d1, table.cmd col.c-d2 { width:64px; }
+table.cmd col.c-cmd { width:132px; } table.cmd col.c-d1 { width:80px; } table.cmd col.c-d2 { width:80px; }
 table.cmd td .decoded { color:var(--accent); }
 
 /* hex bytes grid (fields.py HexBytesField: &hNN 52px cells, blue HEX/DEC read-outs) */
@@ -298,3 +302,6 @@ table.chan input.maxpre { width:60px; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
 .muted { color:var(--text-dim); font-style:italic; }
+
+/* IA Map to use for display: let the "Per last selected Preset — #N NAME → Map" text show in full */
+.formrow select.displaymap { width:100%; max-width:none; justify-self:stretch; min-width:240px; }

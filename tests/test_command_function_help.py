@@ -85,3 +85,24 @@ def test_schema_carries_function_help_for_the_web_editor():
         assert t["funcs"]["48"] == CMD_FUNCS[48] == "Page Button Display Start"
         assert "start index" in t["func_help"]["48"]
         assert set(t["func_help"]) <= set(t["funcs"])
+
+
+def test_every_command_table_column_boundary_is_draggable(win):
+    """No column may be Stretch/ResizeToContents/Fixed: those lock the header boundary, so the
+    pointer shows no resize cursor there (the Cmd column was Stretch)."""
+    from PySide6.QtWidgets import QHeaderView
+    seen = 0
+    for title in ("Presets", "IA-Slot", "Songs"):
+        for f in _cmd_fields(win._tab(title)):
+            hh = f.w.horizontalHeader()
+            for c in range(f.w.columnCount()):
+                assert hh.sectionResizeMode(c) == QHeaderView.Interactive, (title, c)
+            assert f.w.columnWidth(2) >= 100          # Cmd shows "Channel Pressure"
+            seen += 1
+    assert seen
+
+
+def test_display_map_picker_is_wide_enough_for_preset_and_map(win):
+    pages = win._tab("Pages")
+    assert pages.display_map_combo.minimumWidth() >= 320
+    assert pages.display_map_combo.maximumWidth() > 1000     # no 250px cap

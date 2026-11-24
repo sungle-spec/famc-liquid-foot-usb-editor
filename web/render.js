@@ -229,7 +229,18 @@ const LFRender = (() => {
     for (const c of ["c-fn", "c-midi", "c-cmd", "c-d1", "c-d2"]) { const col = document.createElement("col"); col.className = c; cg.appendChild(col); }
     t.appendChild(cg);
     const head = el("tr");
-    ["Function", "MIDI", "Cmd", "CC# / PC#", "Data"].forEach(h => head.appendChild(el("th", null, h)));
+    ["Function", "MIDI", "Cmd", "CC# / PC#", "Data"].forEach((h, i, all) => {
+      const th = el("th", null, h); head.appendChild(th);
+      if (i === all.length - 1) return;             // last column fills the rest; nothing to drag
+      // drag the header boundary to resize the column (like the desktop table)
+      const grip = el("span", "colgrip"); th.appendChild(grip);
+      grip.onpointerdown = (ev) => {
+        ev.preventDefault(); grip.setPointerCapture(ev.pointerId);
+        const col = cg.children[i], x0 = ev.clientX, w0 = th.offsetWidth;
+        grip.onpointermove = (e) => { col.style.width = Math.max(44, w0 + e.clientX - x0) + "px"; };
+        grip.onpointerup = () => { grip.onpointermove = grip.onpointerup = null; };
+      };
+    });
     t.appendChild(head);
 
     for (let r = 0; r < f.count; r++) {
@@ -284,7 +295,7 @@ const LFRender = (() => {
 
       t.appendChild(tr);
     }
-    return t;
+    const wrap = el("div", "cmdwrap"); wrap.appendChild(t); return wrap;   // scrolls sideways in a narrow panel
   }
 
   // Label grid stored in a sibling extension record (PresetExt9/10, SongExt11). Mirrors
@@ -461,6 +472,7 @@ const LFRender = (() => {
         "Pick a map here to label the 60 choices with the IA-Slots that map assigns. Display only — nothing is " +
         "written to the file. Auto uses this page's Force IA map if set, else Map 1 (the default map). " +
         "'Per last selected Preset' uses the map of the Preset you last had open on the Presets tab.";
+      s.className = "displaymap";
       s.onchange = () => { app.displayMap = s.value; relabel(); };
       return s;
     }

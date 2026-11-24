@@ -309,7 +309,8 @@ class PagesTab(QWidget):
         # "IA Map to use for display" — like the original editor's dropdown of the same name, this
         # only chooses which IA-Map labels the 60 IA Slot choices; it is not stored in the file.
         self.display_map_combo = QComboBox()
-        self.display_map_combo.setMaximumWidth(250)
+        self.display_map_combo.setMinimumWidth(320)    # room for "Per last selected Preset — #22 NAME → Map 003"
+        self.display_map_combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
         self.display_map_combo.currentIndexChanged.connect(self._on_display_map_changed)
         tip = ("A button's IA Slot choice N means 'position N of whichever IA-Map is live when the "
                "page runs'. Pick a map here to label the 60 choices with the IA-Slots that map "
