@@ -133,8 +133,10 @@ nibbles" reads the same bytes.
 **Editor control bytes the firmware handles.** Its dispatcher compares the control byte against
 `C8`–`D2`. Known before: `C9` identify, `CA` session, `CB`/`CF` thru/stream start, `CC` stop, `D0`
 reset config, `D1` factory reset. New from the image: **`C8` enters firmware-wait** from the
-running application (no button hold needed; documented, not used by the loader). `CD`, `CE` and
-`D2` are handled too, but what they are for is not yet understood.
+running application (no button hold needed; documented, not used by the loader). `D2` streams the four pedal values live. `CD`/`CE` load a serial baud-rate constant — `0x01FF`
+(31250, MIDI) versus `0x0044` (about 230400, also the start-up default) — so they appear to switch the link
+speed; that is an *inference* from the constants, not confirmed on hardware. See
+[TROUBLESHOOTING_UNIT.md](TROUBLESHOOTING_UNIT.md).
 
 `PIC-18:LE:24:PIC-18` in Ghidra loads the same `--decode` output for cross-checking.
 

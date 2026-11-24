@@ -106,7 +106,7 @@ byte-for-byte; only changed records change):
   targets recovery of units bricked by failed firmware updates (hardware validation is still pending; the editor's own
   *Load Firmware* stays disabled until it graduates). It now verifies each image's own header, length
   and checksum and reads the model from the image; `--decode` exports the PIC18 program memory for a
-  disassembler.
+  disassembler. See also [Troubleshooting a faulty unit](docs/TROUBLESHOOTING_UNIT.md).
 - **Hover help** — every control shows the **original LF+ Editor's exact tooltip** on hover
   (recovered verbatim from the app and mapped to our controls): 131 field + 3 section tooltips
   across 10 tabs, scoped per tab, the Global/IA-Slot maps confirmed by a live hover pass against the

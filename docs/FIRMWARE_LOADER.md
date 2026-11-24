@@ -125,6 +125,8 @@ Every run: send the session log (`~/LFFirmwareLoader-logs/`), your model, firmwa
 flashed, MIDI interface used, and what the device LCD did. Report on the GitHub issues page or
 the forum thread.
 
+Diagnosing a unit that is not (yet) bricked: [TROUBLESHOOTING_UNIT.md](TROUBLESHOOTING_UNIT.md).
+
 ## Risk statement
 
 This tool can permanently damage your device. It is independent, unofficial, unsupported, and
